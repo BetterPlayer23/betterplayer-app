@@ -9,9 +9,13 @@ import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/auth/AuthProvider';
 import { games } from '@/constants/games';
 import { colors, fonts } from '@/constants/theme';
+import { formatCredits } from '@/wallet/format';
+import { useWallet } from '@/wallet/useWallet';
 
 export default function HomeScreen() {
   const { profile } = useAuth();
+  const wallet = useWallet();
+  const credits = (n: number) => (wallet.loading ? '…' : formatCredits(n));
 
   return (
     <Screen>
@@ -21,9 +25,12 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.row}>
-        {/* Credits stay at 0 until the ledger is connected (next step). */}
-        <StatCard label="Available credits" value="0" color={colors.accent} />
-        <StatCard label="Locked credits" value="0" />
+        <StatCard
+          label="Available credits"
+          value={credits(wallet.data.available)}
+          color={colors.accent}
+        />
+        <StatCard label="Locked credits" value={credits(wallet.data.locked)} />
         <StatCard label="Reputation" value="—" />
       </View>
 

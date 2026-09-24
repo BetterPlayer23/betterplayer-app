@@ -19,6 +19,8 @@ Players must be **18+** and in **Spain**.
 2. **The ledger is append-only.** Entries are never edited or deleted; mistakes
    are fixed with a new correcting entry.
 3. **Balances are computed from the ledger**, never stored as an editable number.
+   `wallets/{uid}` (`available`, `locked`) is a read-only summary that Cloud
+   Functions update in the **same transaction** as the ledger entry it reflects.
 4. **No secrets in the app.** Anything in the app ships to every user. The Firebase
    web config in `src/firebase/config.ts` is public by design; API keys for other
    services, admin credentials and service accounts belong in Cloud Functions.
@@ -62,8 +64,13 @@ Players must be **18+** and in **Spain**.
 - `src/app/complete-profile.tsx` – shown if someone is signed in but has no profile yet.
 - `src/auth/` – sign-in state (`AuthProvider`), form checks and plain error messages.
 - `src/firebase/` – Firebase app, Auth and Firestore setup.
-- `firestore.rules` – security rules kept in the repo. **Not deployed automatically**:
-  the owner pastes them into the Firebase console.
+- `src/wallet/` – live, read-only wallet and ledger data, credit formatting and labels.
+- `functions/` – Cloud Functions (TypeScript, Functions v2, Node 22, region `europe-west1`).
+  `onUserCreated` gives the 10 starter credits once (`ledger/grant_{uid}` + `wallets/{uid}`).
+- `firestore.rules`, `firestore.indexes.json` – security rules and indexes.
+- `firebase.json`, `.firebaserc` – Firebase project config (`betterplayer-beta`).
+- `deploy.sh` – deploys functions, rules and indexes. The owner runs `./deploy.sh`
+  from Google Cloud Shell. Nothing is deployed automatically.
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
 
 ## Accounts
@@ -76,6 +83,16 @@ Players must be **18+** and in **Spain**.
 - **Never put credits or reputation in `users/{uid}`**: they are server-only.
 - The app may only change `gamerTag` and `gameIds` after sign-up.
 - Gamer tag: 3–20 letters, numbers or underscores. Password: at least 8 characters.
+
+## Credits data
+
+- `ledger/{entryId}`: `uid`, `type`, `amount`, `description`, `createdAt`. Players
+  read only their own entries; nobody writes from the app. The starter grant's ID
+  is `grant_{uid}`, which is what makes it impossible to grant twice.
+- `wallets/{uid}`: `available`, `locked`, `updatedAt`. Owner can read; nobody writes
+  from the app.
+- Every Cloud Function that moves credits must be idempotent (safe to run twice)
+  and write the ledger entry and wallet change in one transaction.
 
 ## Look and feel
 
@@ -97,6 +114,7 @@ Dark theme only.
 ```bash
 npx tsc --noEmit            # typecheck
 npx expo export -p web      # must build without errors
+npm --prefix functions run build   # if functions/ changed
 ```
 
 @AGENTS.md
