@@ -1,0 +1,65 @@
+rules_version = '2';
+
+// Betterplayer Firestore security rules.
+// NOT deployed automatically. Paste into Firebase console > Firestore > Rules
+// (or deploy with the Firebase CLI) once you've compared it with the live rules.
+//
+// Money rule: the app never writes credits, matches or disputes. Only Cloud
+// Functions do, and they bypass these rules. So anything not listed here is
+// closed to the app by default.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validGamerTag(tag) {
+      return tag is string && tag.matches('^[A-Za-z0-9_]{3,20}$');
+    }
+
+    function validGameId(ids, key) {
+      return !(key in ids) || (ids[key] is string && ids[key].size() > 0 && ids[key].size() <= 40);
+    }
+
+    function validGameIds(ids) {
+      return ids is map
+        && ids.keys().hasOnly(['eaId', 'activisionId', 'epicName', 'clashRoyaleTag'])
+        && validGameId(ids, 'eaId')
+        && validGameId(ids, 'activisionId')
+        && validGameId(ids, 'epicName')
+        && validGameId(ids, 'clashRoyaleTag')
+        && (!('clashRoyaleTag' in ids) || ids.clashRoyaleTag.matches('^#[0289PYLQGRJCUV]{3,14}$'));
+    }
+
+    // users/{uid}: a player's own profile. No credits or reputation here:
+    // those are server-only.
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+             'gamerTag', 'platform', 'ageConfirmed', 'ageConfirmedAt',
+             'country', 'gameIds', 'createdAt'])
+        && request.resource.data.keys().hasAll([
+             'gamerTag', 'platform', 'ageConfirmed', 'ageConfirmedAt',
+             'country', 'gameIds', 'createdAt'])
+        && validGamerTag(request.resource.data.gamerTag)
+        && request.resource.data.platform in ['pc', 'playstation', 'xbox', 'mobile']
+        && request.resource.data.ageConfirmed == true
+        && request.resource.data.ageConfirmedAt == request.time
+        && request.resource.data.country == 'ES'
+        && validGameIds(request.resource.data.gameIds)
+        && request.resource.data.createdAt == request.time;
+
+      // Players may only change their gamer tag and game IDs.
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['gamerTag', 'gameIds'])
+        && validGamerTag(request.resource.data.gamerTag)
+        && validGameIds(request.resource.data.gameIds);
+
+      allow delete: if false;
+    }
+  }
+}

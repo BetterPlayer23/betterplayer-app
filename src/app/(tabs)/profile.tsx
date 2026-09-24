@@ -1,14 +1,219 @@
-import { EmptyState } from '@/components/EmptyState';
+import { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { useAuth } from '@/auth/AuthProvider';
+import { friendlyError } from '@/auth/errors';
+import { gameIdFields, platformLabel, type GameIdKey, type GameIds } from '@/auth/profile';
+import { checkGamerTag, checkGameId, normalizeGameId, GAME_ID_MAX } from '@/auth/validation';
+import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { FormMessage } from '@/components/FormMessage';
 import { Screen, SectionTitle } from '@/components/Screen';
+import { TextField } from '@/components/TextField';
+import { colors, fonts } from '@/constants/theme';
+
+type Message = { kind: 'error' | 'success'; text: string } | null;
 
 export default function ProfileScreen() {
+  const { profile, user, updateGamerTag, updateGameIds, logOut } = useAuth();
+
+  // Gamer tag editing
+  const [editingTag, setEditingTag] = useState(false);
+  const [tag, setTag] = useState(profile?.gamerTag ?? '');
+  const [tagError, setTagError] = useState<string | null>(null);
+  const [tagMessage, setTagMessage] = useState<Message>(null);
+  const [savingTag, setSavingTag] = useState(false);
+
+  // Game IDs
+  const [ids, setIds] = useState<Record<GameIdKey, string>>(() => toForm(profile?.gameIds));
+  const [idErrors, setIdErrors] = useState<Partial<Record<GameIdKey, string | null>>>({});
+  const [idsMessage, setIdsMessage] = useState<Message>(null);
+  const [savingIds, setSavingIds] = useState(false);
+
+  // Keep the form in step with the saved profile when not editing.
+  useEffect(() => {
+    if (!editingTag) setTag(profile?.gamerTag ?? '');
+  }, [profile?.gamerTag, editingTag]);
+
+  if (!profile || !user) return null;
+
+  async function saveTag() {
+    const err = checkGamerTag(tag);
+    setTagError(err);
+    setTagMessage(null);
+    if (err) return;
+    setSavingTag(true);
+    try {
+      await updateGamerTag(tag);
+      setEditingTag(false);
+      setTagMessage({ kind: 'success', text: 'Gamer tag saved.' });
+    } catch (e) {
+      setTagMessage({ kind: 'error', text: friendlyError(e) });
+    } finally {
+      setSavingTag(false);
+    }
+  }
+
+  async function saveIds() {
+    const errors: Partial<Record<GameIdKey, string | null>> = {};
+    const cleaned: GameIds = {};
+    for (const f of gameIdFields) {
+      errors[f.key] = checkGameId(f.key, ids[f.key]);
+      const v = normalizeGameId(f.key, ids[f.key]);
+      if (v) cleaned[f.key] = v;
+    }
+    setIdErrors(errors);
+    setIdsMessage(null);
+    if (Object.values(errors).some(Boolean)) return;
+    setSavingIds(true);
+    try {
+      await updateGameIds(cleaned);
+      setIds(toForm(cleaned));
+      setIdsMessage({ kind: 'success', text: 'Game IDs saved.' });
+    } catch (e) {
+      setIdsMessage({ kind: 'error', text: friendlyError(e) });
+    } finally {
+      setSavingIds(false);
+    }
+  }
+
   return (
     <Screen>
       <SectionTitle>Profile</SectionTitle>
-      <EmptyState
-        title="Your gamer tag and platforms"
-        message="Add your gamer tag for each game so rivals can find you."
-      />
+      <Card style={styles.card}>
+        {editingTag ? (
+          <>
+            <TextField
+              label="Gamer tag"
+              value={tag}
+              onChangeText={setTag}
+              error={tagError}
+              hint="Visible to other players. 3–20 letters, numbers or _."
+              maxLength={20}
+            />
+            <View style={styles.row}>
+              <Button
+                label="Cancel"
+                variant="outline"
+                style={styles.flex}
+                onPress={() => {
+                  setEditingTag(false);
+                  setTagError(null);
+                }}
+              />
+              <Button label="Save" style={styles.flex} onPress={saveTag} loading={savingTag} />
+            </View>
+          </>
+        ) : (
+          <View style={styles.tagRow}>
+            <Info label="Gamer tag" value={profile.gamerTag} big />
+            <Button
+              label="Edit"
+              variant="outline"
+              style={styles.editButton}
+              onPress={() => {
+                setEditingTag(true);
+                setTagMessage(null);
+              }}
+            />
+          </View>
+        )}
+        {tagMessage && <FormMessage kind={tagMessage.kind} text={tagMessage.text} />}
+        <Info label="Primary platform" value={platformLabel(profile.platform)} />
+        <Info label="Email" value={user.email ?? '—'} />
+      </Card>
+
+      <SectionTitle>Game IDs</SectionTitle>
+      <Card style={styles.card}>
+        <Text style={styles.help}>
+          Add the name you use in each game so rivals can find you. Leave a box empty if you don’t
+          play that game.
+        </Text>
+        {gameIdFields.map((f) => (
+          <TextField
+            key={f.key}
+            label={`${f.label} · ${f.game}`}
+            placeholder={f.placeholder}
+            value={ids[f.key]}
+            onChangeText={(v) => setIds((prev) => ({ ...prev, [f.key]: v }))}
+            error={idErrors[f.key]}
+            maxLength={GAME_ID_MAX + 1}
+          />
+        ))}
+        {idsMessage && <FormMessage kind={idsMessage.kind} text={idsMessage.text} />}
+        <Button label="Save game IDs" onPress={saveIds} loading={savingIds} />
+      </Card>
+
+      <Button label="Log out" variant="outline" onPress={logOut} style={styles.logout} />
     </Screen>
   );
 }
+
+function toForm(gameIds: GameIds | undefined): Record<GameIdKey, string> {
+  return {
+    eaId: gameIds?.eaId ?? '',
+    activisionId: gameIds?.activisionId ?? '',
+    epicName: gameIds?.epicName ?? '',
+    clashRoyaleTag: gameIds?.clashRoyaleTag ?? '',
+  };
+}
+
+function Info({ label, value, big }: { label: string; value: string; big?: boolean }) {
+  return (
+    <View style={styles.info}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={[styles.infoValue, big && styles.infoValueBig]}>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    gap: 16,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  flex: {
+    flex: 1,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  editButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    minHeight: 40,
+  },
+  info: {
+    flexShrink: 1,
+    gap: 2,
+  },
+  infoLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  infoValue: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 16,
+    color: colors.text,
+  },
+  infoValueBig: {
+    fontFamily: fonts.heading,
+    fontSize: 26,
+  },
+  help: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textMuted,
+  },
+  logout: {
+    marginTop: 8,
+  },
+});

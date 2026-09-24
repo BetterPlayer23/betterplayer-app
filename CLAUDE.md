@@ -58,8 +58,24 @@ Players must be **18+** and in **Spain**.
 - `src/components/` – shared UI: header, cards, buttons, empty states, game tiles.
 - `src/constants/theme.ts` – colors and fonts. Use these, don't hard-code colors.
 - `src/constants/games.ts` – the supported games and their tile colours.
+- `src/app/(auth)/` – Sign up and Log in, shown only when signed out.
+- `src/app/complete-profile.tsx` – shown if someone is signed in but has no profile yet.
+- `src/auth/` – sign-in state (`AuthProvider`), form checks and plain error messages.
 - `src/firebase/` – Firebase app, Auth and Firestore setup.
+- `firestore.rules` – security rules kept in the repo. **Not deployed automatically**:
+  the owner pastes them into the Firebase console.
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
+
+## Accounts
+
+- Email and password sign-in (Firebase Auth). Users stay signed in.
+- The tabs are only reachable when signed in (`Stack.Protected` in `src/app/_layout.tsx`).
+- `users/{uid}` holds: `gamerTag`, `platform` (`pc`, `playstation`, `xbox`, `mobile`),
+  `ageConfirmed: true`, `ageConfirmedAt`, `country: "ES"` (self-declared), `gameIds`
+  (`eaId`, `activisionId`, `epicName`, `clashRoyaleTag`), `createdAt`.
+- **Never put credits or reputation in `users/{uid}`**: they are server-only.
+- The app may only change `gamerTag` and `gameIds` after sign-up.
+- Gamer tag: 3–20 letters, numbers or underscores. Password: at least 8 characters.
 
 ## Look and feel
 

@@ -10,20 +10,18 @@ import { DarkTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import 'react-native-reanimated';
 
-import { colors } from '@/constants/theme';
-// Start Firebase at launch so a saved sign-in is restored early.
-import '@/firebase';
+import { AuthProvider, useAuth } from '@/auth/AuthProvider';
+import { AppHeader } from '@/components/AppHeader';
+import { Button } from '@/components/Button';
+import { colors, fonts } from '@/constants/theme';
 
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary,
 } from 'expo-router';
-
-export const unstable_settings = {
-  initialRouteName: '(tabs)',
-};
 
 // Keep the splash screen visible until the fonts are loaded.
 SplashScreen.preventAutoHideAsync();
@@ -69,9 +67,82 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={theme}>
       <StatusBar style="light" />
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
     </ThemeProvider>
   );
 }
+
+// Decides which screens exist: the tabs only when signed in,
+// Sign up / Log in only when signed out.
+function RootNavigator() {
+  const { status, retry, logOut } = useAuth();
+
+  if (status === 'loading') {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.accent} size="large" />
+      </View>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>We couldn’t load your profile</Text>
+        <Text style={styles.errorText}>Check your internet connection and try again.</Text>
+        <View style={styles.errorButtons}>
+          <Button label="Try again" onPress={retry} />
+          <Button label="Log out" variant="outline" onPress={logOut} />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <Stack
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+      <Stack.Protected guard={status === 'signedIn'}>
+        <Stack.Screen name="(tabs)" />
+      </Stack.Protected>
+      <Stack.Protected guard={status === 'needsProfile'}>
+        <Stack.Screen
+          name="complete-profile"
+          options={{ headerShown: true, header: () => <AppHeader /> }}
+        />
+      </Stack.Protected>
+      <Stack.Protected guard={status === 'signedOut'}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+    </Stack>
+  );
+}
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    gap: 12,
+    backgroundColor: colors.background,
+  },
+  errorTitle: {
+    fontFamily: fonts.heading,
+    fontSize: 24,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  errorButtons: {
+    alignSelf: 'stretch',
+    gap: 10,
+    marginTop: 8,
+  },
+});
