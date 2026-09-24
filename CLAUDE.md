@@ -32,9 +32,13 @@ Players must be **18+** and in **Spain**.
   - **Clash Royale**: 1v1.
 - Every player gets **10 starter credits, once**.
 - Entry is **fixed at 2 credits** per player.
-- A **20% fee** is taken from the pot. It is simulated: credits only, no money.
-  Example 1v1: pot 4 credits, fee 0.80, the winner gets 3.20.
-  How the pot is split in 2–4 player games is not decided yet: ask before building it.
+- Betterplayer always takes a **20% fee of the whole pot** (all entries added
+  together), whatever the number of players. It is simulated: credits only, no money.
+  - 1v1: pot 4 credits, fee 0.80, the winner gets 3.20.
+  - 3 players: pot 6 credits, fee 1.20, 4.80 left for the players.
+  - 4 players: pot 8 credits, fee 1.60, 6.40 left for the players.
+  Who gets the 80% left in 2–4 player games (winner only, or shared) is not
+  decided yet: ask before building it.
 - A player can play **at most 10 matches per day**.
 - **A Betterplayer admin validates every match before any credits move.**
   Until then the match shows as "awaiting result".
