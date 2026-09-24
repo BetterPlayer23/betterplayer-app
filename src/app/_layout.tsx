@@ -1,8 +1,10 @@
-import { Barlow_400Regular, Barlow_500Medium, Barlow_700Bold } from '@expo-google-fonts/barlow';
+import { Exo2_700Bold_Italic, Exo2_800ExtraBold_Italic } from '@expo-google-fonts/exo-2';
 import {
-  BigShouldersDisplay_600SemiBold,
-  BigShouldersDisplay_800ExtraBold,
-} from '@expo-google-fonts/big-shoulders-display';
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
 import { useFonts } from 'expo-font';
 import { DarkTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -30,22 +32,23 @@ const theme: Theme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    primary: colors.floodlight,
-    background: colors.deep,
-    card: colors.pitch,
-    text: colors.chalk,
-    border: colors.line,
-    notification: colors.red,
+    primary: colors.primary,
+    background: colors.background,
+    card: colors.surface,
+    text: colors.text,
+    border: colors.border,
+    notification: colors.error,
   },
 };
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    BigShouldersDisplay_600SemiBold,
-    BigShouldersDisplay_800ExtraBold,
-    Barlow_400Regular,
-    Barlow_500Medium,
-    Barlow_700Bold,
+    Exo2_700Bold_Italic,
+    Exo2_800ExtraBold_Italic,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
   });
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.

@@ -10,7 +10,7 @@ export default function NotFoundScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>This screen doesn't exist.</Text>
         <Link href="/" style={styles.link}>
-          Back to the lobby
+          Back to home
         </Link>
       </View>
     </>
@@ -23,18 +23,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: colors.deep,
+    backgroundColor: colors.background,
   },
   title: {
     fontFamily: fonts.heading,
     fontSize: 28,
-    color: colors.chalk,
+    color: colors.text,
   },
   link: {
     marginTop: 15,
     paddingVertical: 15,
     fontFamily: fonts.bodyBold,
     fontSize: 16,
-    color: colors.floodlight,
+    color: colors.accent,
   },
 });

@@ -1,6 +1,7 @@
-# BetterPlayer
+# Betterplayer
 
-Stake credits on your own EA FC 1v1 matches. Beta: credits only, no real money.
+Play your own online matches for credits: EA FC, Warzone Rebirth, Fortnite and Clash Royale.
+Closed beta: credits only, no real money. 18+, Spain only.
 
 Built with Expo (React Native), Expo Router and Firebase.
 

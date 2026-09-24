@@ -1,7 +1,8 @@
-# BetterPlayer
+# Betterplayer
 
-BetterPlayer lets gamers stake credits on their own EA FC 1v1 matches.
-The beta is **credits only**: no real money anywhere.
+Betterplayer lets gamers enter their own online matches for credits.
+The beta is a **closed beta, credits only**: no real money anywhere.
+Players must be **18+** and in **Spain**.
 
 ## Who you are working with
 
@@ -24,24 +25,52 @@ The beta is **credits only**: no real money anywhere.
 
 ## Game rules
 
-- Each player stakes **2 credits** (pot = 4 credits).
-- The house fee is **20%** of the pot (0.80 credits).
-- The **winner gets 3.20 credits**.
-- **Draws are decided on penalties**: there is always a winner.
+- Games:
+  - **EA FC**: 1v1. Draws are decided on penalties, so there is always a winner.
+  - **Warzone Rebirth**: 2–4 players.
+  - **Fortnite**: 2–4 players.
+  - **Clash Royale**: 1v1.
+- Every player gets **10 starter credits, once**.
+- Entry is **fixed at 2 credits** per player.
+- A **20% fee** is taken from the pot. It is simulated: credits only, no money.
+  Example 1v1: pot 4 credits, fee 0.80, the winner gets 3.20.
+  How the pot is split in 2–4 player games is not decided yet: ask before building it.
+- A player can play **at most 10 matches per day**.
+- **A Betterplayer admin validates every match before any credits move.**
+  Until then the match shows as "awaiting result".
+
+## Words in the app
+
+- **No cash words.** Never show "cashout", "stakes", "bet" (or similar, like
+  "wager", "gamble", "payout", "odds") anywhere in the app. Say "credits",
+  "entry", "match", "win" instead.
+- **No game publisher logos or artwork.** Show games as their name on a coloured
+  tile (`src/components/GameTile.tsx`, games listed in `src/constants/games.ts`).
 
 ## Project layout
 
-- `src/app/` – screens (Expo Router). `(tabs)/` holds Lobby, Wallet and Profile.
-- `src/components/` – shared UI (header, placeholder screen).
+- `src/app/` – screens (Expo Router). `(tabs)/` holds Home (`index`), Matches,
+  Create (the raised round + button), Wallet and Profile.
+- `src/components/` – shared UI: header, cards, buttons, empty states, game tiles.
 - `src/constants/theme.ts` – colors and fonts. Use these, don't hard-code colors.
+- `src/constants/games.ts` – the supported games and their tile colours.
 - `src/firebase/` – Firebase app, Auth and Firestore setup.
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
 
 ## Look and feel
 
-Dark theme only. Pitch green `#0F4D3A`, deep green `#0A3527`, chalk `#EEF2EA`,
-floodlight yellow `#FFD23F`, red `#E03A3E` for errors only.
-Big Shoulders Display for headings, Barlow for text.
+Dark theme only.
+
+- Background dark navy `#070B16`; cards `#0E1628` with thin blue borders `#1C2A4A`.
+- Electric blue `#1E6BFF` for primary actions, with a soft glow.
+- Cyan `#29B6FF` accent.
+- Green `#22C55E` for Join and success.
+- Yellow `#FACC15` for "awaiting result".
+- Red `#EF4444` for errors and full matches.
+- Text `#F5F7FF`, muted text `#8A97B5`.
+- Fonts: Exo 2 bold italic for the logo and headings, Inter for body text.
+- Every screen has the header: "Betterplayer" logo, outlined "CLOSED BETA" badge,
+  and "18+ · Spain only".
 
 ## Before finishing a change
 

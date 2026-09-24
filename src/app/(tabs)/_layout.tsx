@@ -4,6 +4,7 @@ import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '@/components/AppHeader';
+import { CreateTabButton } from '@/components/CreateTabButton';
 import { colors, fonts } from '@/constants/theme';
 
 function TabIcon({ name, color }: { name: SymbolViewProps['name']; color: ColorValue }) {
@@ -17,28 +18,44 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         header: () => <AppHeader />,
-        tabBarActiveTintColor: colors.floodlight,
-        tabBarInactiveTintColor: colors.chalkMuted,
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
-          backgroundColor: colors.pitch,
-          borderTopColor: colors.line,
-          // A little taller than the default so the Barlow labels are not cut off.
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          // A little taller than the default so the labels are not cut off.
           height: 58 + insets.bottom,
           paddingBottom: insets.bottom,
         },
-        tabBarLabelStyle: { fontFamily: fonts.bodyMedium, fontSize: 12, lineHeight: 16 },
-        sceneStyle: { backgroundColor: colors.deep },
+        tabBarLabelStyle: { fontFamily: fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
+        sceneStyle: { backgroundColor: colors.background },
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Lobby',
+          title: 'Home',
+          tabBarIcon: ({ color }) => (
+            <TabIcon name={{ ios: 'house.fill', android: 'home', web: 'home' }} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="matches"
+        options={{
+          title: 'Matches',
           tabBarIcon: ({ color }) => (
             <TabIcon
-              name={{ ios: 'sportscourt.fill', android: 'stadium', web: 'stadium' }}
+              name={{ ios: 'gamecontroller.fill', android: 'sports_esports', web: 'sports_esports' }}
               color={color}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="create"
+        options={{
+          title: 'Create',
+          tabBarButton: (props) => <CreateTabButton {...props} />,
         }}
       />
       <Tabs.Screen
