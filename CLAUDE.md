@@ -75,7 +75,9 @@ Players must be **18+** and in **Spain**.
   `onUserCreated` gives the 10 starter credits once (`ledger/grant_{uid}` + `wallets/{uid}`).
 - `firestore.rules`, `firestore.indexes.json` – security rules and indexes.
 - `firebase.json`, `.firebaserc` – Firebase project config (`betterplayer-beta`).
-- `deploy.sh` – installs the functions dependencies and runs `firebase deploy --only
+- `deploy.sh` – wakes Cloud Shell's Google credentials (`gcloud auth print-access-token`;
+  a new session may show an in-shell "Authorize" box), installs the functions
+  dependencies and runs `firebase deploy --only
   functions,firestore:rules,firestore:indexes --project betterplayer-beta`. **No
   `firebase login`**: Cloud Shell's own Google credentials are enough, and the login
   link can't complete on the owner's iPhone. Nothing is deployed automatically.
