@@ -6,7 +6,7 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import { useFonts } from 'expo-font';
-import { DarkTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider, router, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -105,6 +105,17 @@ function RootNavigator() {
       screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
       <Stack.Protected guard={status === 'signedIn'}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="match"
+          options={{
+            headerShown: true,
+            header: ({ navigation }) => (
+              <AppHeader
+                onBack={() => (navigation.canGoBack() ? navigation.goBack() : router.replace('/'))}
+              />
+            ),
+          }}
+        />
       </Stack.Protected>
       <Stack.Protected guard={status === 'needsProfile'}>
         <Stack.Screen

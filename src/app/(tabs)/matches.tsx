@@ -1,18 +1,28 @@
-import { EmptyState } from '@/components/EmptyState';
+import { JoinWithCode } from '@/components/JoinWithCode';
+import { MatchList } from '@/components/MatchList';
 import { Screen, SectionTitle } from '@/components/Screen';
+import { useMyMatches, useOpenMatches } from '@/matches/hooks';
 
 export default function MatchesScreen() {
+  const open = useOpenMatches();
+  const mine = useMyMatches();
+
   return (
     <Screen>
+      <JoinWithCode />
       <SectionTitle>Open matches</SectionTitle>
-      <EmptyState
-        title="No open matches right now"
-        message="Open matches from other players will appear here so you can join."
+      <MatchList
+        {...open}
+        matches={open.data}
+        emptyTitle="No open matches right now"
+        emptyMessage="Be the first: tap + to create a match and share its code with a rival."
       />
       <SectionTitle>Your matches</SectionTitle>
-      <EmptyState
-        title="Nothing here yet"
-        message="Matches you play, and their results, will be listed here."
+      <MatchList
+        {...mine}
+        matches={mine.data}
+        emptyTitle="Nothing here yet"
+        emptyMessage="Matches you create or join will be listed here."
       />
     </Screen>
   );

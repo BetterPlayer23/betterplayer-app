@@ -76,6 +76,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // matches/{matchId}: any signed-in player can see matches (lobby, rooms).
+    // Only Cloud Functions create or change them.
+    match /matches/{matchId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // waitlist/{docId}: sign-ups from the landing page. Anyone may add an
     // entry; nobody can read, change or delete entries from an app or browser.
     match /waitlist/{docId} {

@@ -1,15 +1,28 @@
-// Supported games. Never use publisher logos or artwork: games are shown
-// as their name on a coloured tile (see src/components/GameTile.tsx).
-export type Game = {
-  id: 'eafc' | 'warzone-rebirth' | 'fortnite' | 'clash-royale';
-  name: string;
-  players: string;
+// Supported games. The rules (players, format, which game ID is needed) live
+// in ONE shared place used by the app and the Cloud Functions:
+// functions/src/shared/games.ts. This file only adds the tile colours.
+// Never use publisher logos or artwork: games are shown as their name on a
+// coloured tile (see src/components/GameTile.tsx).
+import { GAMES, type GameConfig, type GameId } from '@shared/games';
+
+export type Game = GameConfig & {
+  players: string; // short label for tiles, e.g. "1v1" or "2–4 players"
   color: string;
 };
 
-export const games: Game[] = [
-  { id: 'eafc', name: 'EA FC', players: '1v1', color: '#22C55E' },
-  { id: 'warzone-rebirth', name: 'Warzone Rebirth', players: '2–4 players', color: '#F97316' },
-  { id: 'fortnite', name: 'Fortnite', players: '2–4 players', color: '#A855F7' },
-  { id: 'clash-royale', name: 'Clash Royale', players: '1v1', color: '#29B6FF' },
-];
+const colorsById: Record<GameId, string> = {
+  eafc: '#22C55E',
+  'warzone-rebirth': '#F97316',
+  fortnite: '#A855F7',
+  'clash-royale': '#29B6FF',
+};
+
+export const games: Game[] = GAMES.map((g) => ({
+  ...g,
+  players: g.minPlayers === g.maxPlayers ? '1v1' : `${g.minPlayers}–${g.maxPlayers} players`,
+  color: colorsById[g.id],
+}));
+
+export function gameById(id: string): Game | undefined {
+  return games.find((g) => g.id === id);
+}

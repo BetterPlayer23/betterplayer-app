@@ -1,14 +1,32 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, fonts } from '@/constants/theme';
 
-export function AppHeader() {
+// Pass onBack to show a back arrow before the logo.
+export function AppHeader({ onBack }: { onBack?: () => void }) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-      <Text style={styles.logo}>Betterplayer</Text>
+      <View style={styles.left}>
+        {onBack && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={onBack}
+            hitSlop={10}
+            style={styles.back}>
+            <SymbolView
+              name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+              tintColor={colors.text}
+              size={22}
+            />
+          </Pressable>
+        )}
+        <Text style={styles.logo}>Betterplayer</Text>
+      </View>
       <View style={styles.right}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>CLOSED BETA</Text>
@@ -29,6 +47,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+  },
+  back: {
+    padding: 2,
   },
   logo: {
     fontFamily: fonts.headingHeavy,

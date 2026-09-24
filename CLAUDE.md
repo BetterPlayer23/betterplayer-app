@@ -59,12 +59,18 @@ Players must be **18+** and in **Spain**.
   Create (the raised round + button), Wallet and Profile.
 - `src/components/` – shared UI: header, cards, buttons, empty states, game tiles.
 - `src/constants/theme.ts` – colors and fonts. Use these, don't hard-code colors.
-- `src/constants/games.ts` – the supported games and their tile colours.
+- `functions/src/shared/games.ts` – **the one place for game and credit rules**
+  (players, format, rules text, needed game ID, entry, fee, payout, limits). Used by
+  the Cloud Functions and by the app (imported as `@shared/games`). Keep it import-free.
+- `src/constants/games.ts` – adds tile colours to the shared game config.
 - `src/app/(auth)/` – Sign up and Log in, shown only when signed out.
 - `src/app/complete-profile.tsx` – shown if someone is signed in but has no profile yet.
 - `src/auth/` – sign-in state (`AuthProvider`), form checks and plain error messages.
 - `src/firebase/` – Firebase app, Auth and Firestore setup.
 - `src/wallet/` – live, read-only wallet and ledger data, credit formatting and labels.
+- `src/matches/` – match types, live Firestore hooks, and `api.ts` (the only way the
+  app changes matches: callable Cloud Functions). `src/app/match.tsx` is the Match
+  room (`/match?id=…`; a query parameter so it works as a static page on GitHub Pages).
 - `functions/` – Cloud Functions (TypeScript, Functions v2, Node 22, region `europe-west1`).
   `onUserCreated` gives the 10 starter credits once (`ledger/grant_{uid}` + `wallets/{uid}`).
 - `firestore.rules`, `firestore.indexes.json` – security rules and indexes.
@@ -101,6 +107,27 @@ Players must be **18+** and in **Spain**.
   from the app.
 - Every Cloud Function that moves credits must be idempotent (safe to run twice)
   and write the ledger entry and wallet change in one transaction.
+
+## Matches
+
+- Lifecycle: `open` → `full` → `started` → `awaiting_result` → `under_review` →
+  `completed`, or `cancelled`. Round A (built) covers open, full, started, cancelled.
+- All match changes go through callable Cloud Functions in `europe-west1`
+  (`functions/src/matches/actions.ts`): `createMatch`, `joinMatch` (by id or share
+  code), `leaveMatch`, `setLobbyCode`, `startMatch`, `cancelMatch`, plus the scheduled
+  `expireOpenMatches` (every 5 min, cancels open matches after 15 minutes).
+- Create/join need a profile with the game's ID, at least 2 available credits, and
+  fewer than 10 matches created or joined today (Europe/Madrid, `dailyCounts/{uid}_{day}`).
+- Share codes: 6 characters without 0/O/1/I, reserved in `matchCodes/{code}`.
+- `startMatch` locks 2 credits per player in one transaction: ledger
+  `lock_{matchId}_{uid}` (type `stake_lock`, amount 2) and wallet available → locked.
+  Idempotent. If any player is short, nothing is locked.
+- Signed-in players can read `matches`; nobody writes them from the app.
+  `dailyCounts` and `matchCodes` are server-only (closed by the catch-all).
+- The internal type name is `stake_lock`, but the app shows it as
+  **"Entry locked: [game] match"** (no cash words on screen).
+- Callable errors: the Firebase library appends " [400]"-style codes to messages;
+  always show them through `matchError()` in `src/matches/api.ts`.
 
 ## Look and feel
 

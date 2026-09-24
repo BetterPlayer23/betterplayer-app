@@ -10,6 +10,7 @@ import {
   formatCredits,
   formatDate,
   formatSignedCredits,
+  isLock,
   ledgerLabel,
 } from '@/wallet/format';
 import { useLedger, useWallet, type LedgerEntry } from '@/wallet/useWallet';
@@ -59,10 +60,15 @@ export default function WalletScreen() {
 }
 
 function HistoryRow({ entry, first }: { entry: LedgerEntry; first: boolean }) {
-  const positive = entry.amount > 0;
+  const lock = isLock(entry.type);
+  const positive = !lock && entry.amount > 0;
   const label = ledgerLabel(entry.type, entry.description);
   // Skip the description when it would just repeat the label.
-  const detail = entry.description && entry.description !== label ? entry.description : null;
+  const detail = lock
+    ? 'Moved from available to locked until the result is confirmed'
+    : entry.description && entry.description !== label
+      ? entry.description
+      : null;
 
   return (
     <View style={[styles.item, !first && styles.itemBorder]}>
@@ -73,8 +79,13 @@ function HistoryRow({ entry, first }: { entry: LedgerEntry; first: boolean }) {
           {entry.createdAt ? formatDate(entry.createdAt.toDate()) : 'Just now'}
         </Text>
       </View>
-      <Text style={[styles.amount, { color: positive ? colors.success : colors.text }]}>
-        {formatSignedCredits(entry.amount)}
+      <Text
+        style={[
+          styles.amount,
+          lock && styles.lockAmount,
+          { color: positive ? colors.success : lock ? colors.textMuted : colors.text },
+        ]}>
+        {lock ? `${formatCredits(entry.amount)} locked` : formatSignedCredits(entry.amount)}
       </Text>
     </View>
   );
@@ -129,5 +140,8 @@ const styles = StyleSheet.create({
   amount: {
     fontFamily: fonts.heading,
     fontSize: 22,
+  },
+  lockAmount: {
+    fontSize: 16,
   },
 });

@@ -12,6 +12,7 @@ export function formatSignedCredits(n: number): string {
 // entry's own description.
 const typeLabels: Record<string, string> = {
   starter_grant: 'Starter credits',
+  stake_lock: 'Entry locked',
   match_entry: 'Match entry',
   match_win: 'Match win',
   entry_returned: 'Entry returned',
@@ -19,7 +20,14 @@ const typeLabels: Record<string, string> = {
 };
 
 export function ledgerLabel(type: string, description: string): string {
+  // Entry locks carry the game in their description: "Entry locked: EA FC match".
+  if (type === 'stake_lock' && description) return description;
   return typeLabels[type] ?? (description || 'Credits');
+}
+
+// Entry locks move credits from available to locked; they aren't spent yet.
+export function isLock(type: string): boolean {
+  return type === 'stake_lock';
 }
 
 export function formatDate(date: Date): string {

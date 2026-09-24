@@ -3,11 +3,14 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
+import { MatchCard } from '@/components/MatchCard';
+import { MatchList } from '@/components/MatchList';
 import { GameTile } from '@/components/GameTile';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/auth/AuthProvider';
 import { games } from '@/constants/games';
+import { useMyMatches, useOpenMatches } from '@/matches/hooks';
 import { colors, fonts } from '@/constants/theme';
 import { formatCredits } from '@/wallet/format';
 import { useWallet } from '@/wallet/useWallet';
@@ -16,6 +19,8 @@ export default function HomeScreen() {
   const { profile } = useAuth();
   const wallet = useWallet();
   const credits = (n: number) => (wallet.loading ? '…' : formatCredits(n));
+  const mine = useMyMatches(10);
+  const open = useOpenMatches(5);
 
   return (
     <Screen>
@@ -49,15 +54,21 @@ export default function HomeScreen() {
       </View>
 
       <SectionTitle>Active match</SectionTitle>
-      <EmptyState
-        title="No active match"
-        message="When you create or join a match, it will show up here."
-      />
+      {mine.active ? (
+        <MatchCard match={mine.active} />
+      ) : (
+        <EmptyState
+          title="No active match"
+          message="When you create or join a match, it will show up here."
+        />
+      )}
 
       <SectionTitle>Open matches</SectionTitle>
-      <EmptyState
-        title="No open matches right now"
-        message="Be the first: create a match and invite a rival."
+      <MatchList
+        {...open}
+        matches={open.data}
+        emptyTitle="No open matches right now"
+        emptyMessage="Be the first: create a match and invite a rival."
       />
 
       <SectionTitle>Games</SectionTitle>

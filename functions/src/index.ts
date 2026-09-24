@@ -2,8 +2,12 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { onDocumentCreated } from 'firebase-functions/firestore';
+import { onCall, type CallableRequest } from 'firebase-functions/https';
 import { setGlobalOptions } from 'firebase-functions/options';
+import { onSchedule } from 'firebase-functions/scheduler';
 
+import * as matches from './matches/actions';
+import { requireUid } from './matches/common';
 import { grantStarterCredits } from './starterGrant';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
@@ -18,5 +22,36 @@ export const onUserCreated = onDocumentCreated(
     const { uid } = event.params;
     const granted = await grantStarterCredits(getFirestore(), uid);
     logger.info(granted ? 'Starter credits granted' : 'Starter credits already granted', { uid });
+  },
+);
+
+// ---- Match flow (round A). The app calls these; it never writes matches,
+// wallets or the ledger itself.
+
+type Action = (
+  db: FirebaseFirestore.Firestore,
+  uid: string,
+  data: Record<string, unknown> | undefined,
+) => Promise<unknown>;
+
+const callable = (action: Action) =>
+  onCall(async (request: CallableRequest<Record<string, unknown> | undefined>) => {
+    const uid = requireUid(request.auth);
+    return action(getFirestore(), uid, request.data);
+  });
+
+export const createMatch = callable(matches.createMatch);
+export const joinMatch = callable(matches.joinMatch);
+export const leaveMatch = callable(matches.leaveMatch);
+export const setLobbyCode = callable(matches.setLobbyCode);
+export const startMatch = callable(matches.startMatch);
+export const cancelMatch = callable(matches.cancelMatch);
+
+// Every 5 minutes: cancel open matches nobody filled within 15 minutes.
+export const expireOpenMatches = onSchedule(
+  { schedule: 'every 5 minutes', timeZone: 'Europe/Madrid' },
+  async () => {
+    const count = await matches.cancelExpiredMatches(getFirestore());
+    if (count) logger.info('Cancelled expired matches', { count });
   },
 );
