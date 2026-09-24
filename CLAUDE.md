@@ -75,15 +75,15 @@ Players must be **18+** and in **Spain**.
   `onUserCreated` gives the 10 starter credits once (`ledger/grant_{uid}` + `wallets/{uid}`).
 - `firestore.rules`, `firestore.indexes.json` – security rules and indexes.
 - `firebase.json`, `.firebaserc` – Firebase project config (`betterplayer-beta`).
-- `deploy.sh` – one command that does everything: installs the Firebase CLI if
-  needed, logs in only if Cloud Shell's Google login isn't enough, deploys functions,
-  rules and indexes (retrying up to 3 times), then runs `./top-up.sh --apply`.
-  Nothing is deployed automatically. The owner pastes this in Google Cloud Shell
-  (first time and every time; Cloud Shell disconnects when switching apps, so keep
-  it to one command):
+- `deploy.sh` – installs the functions dependencies and runs `firebase deploy --only
+  functions,firestore:rules,firestore:indexes --project betterplayer-beta`. **No
+  `firebase login`**: Cloud Shell's own Google credentials are enough, and the login
+  link can't complete on the owner's iPhone. Nothing is deployed automatically.
+  The owner pastes this in Google Cloud Shell (keep it to one command; Cloud Shell
+  disconnects when switching apps):
   `cd ~ && ( [ -d betterplayer-app ] || git clone https://github.com/BetterPlayer23/betterplayer-app.git ) && cd betterplayer-app && git pull -q && ./deploy.sh`
 - `top-up.sh` – starter credits for players who signed up before the Cloud Function
-  existed. `./top-up.sh` previews, `./top-up.sh --apply` grants. Safe to re-run
+  existed. Not run by `deploy.sh`. `./top-up.sh` previews, `./top-up.sh --apply` grants. Safe to re-run
   (uses the same idempotent `grantStarterCredits`).
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
 
