@@ -71,6 +71,9 @@ Players must be **18+** and in **Spain**.
 - `firebase.json`, `.firebaserc` – Firebase project config (`betterplayer-beta`).
 - `deploy.sh` – deploys functions, rules and indexes. The owner runs `./deploy.sh`
   from Google Cloud Shell. Nothing is deployed automatically.
+- `top-up.sh` – one-time top-up of starter credits for players who signed up before
+  the Cloud Function existed. `./top-up.sh` previews, `./top-up.sh --apply` grants.
+  Safe to re-run (uses the same idempotent `grantStarterCredits`).
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
 
 ## Accounts
