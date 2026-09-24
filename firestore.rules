@@ -5,8 +5,8 @@ rules_version = '2';
 // (or deploy with the Firebase CLI) once you've compared it with the live rules.
 //
 // Money rule: the app never writes credits, matches or disputes. Only Cloud
-// Functions do, and they bypass these rules. So anything not listed here is
-// closed to the app by default.
+// Functions do, and they bypass these rules. Anything not listed here is
+// closed by the catch-all at the bottom.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -60,6 +60,31 @@ service cloud.firestore {
         && validGameIds(request.resource.data.gameIds);
 
       allow delete: if false;
+    }
+
+    // waitlist/{docId}: sign-ups from the landing page. Anyone may add one
+    // entry; nobody can read, change or delete entries from an app or browser.
+    match /waitlist/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['name', 'email', 'eaId', 'platform', 'consent', 'createdAt'])
+        && request.resource.data.keys().hasAll(['name', 'email', 'eaId', 'platform', 'consent', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 120
+        && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$')
+        && request.resource.data.eaId is string
+        && request.resource.data.eaId.size() <= 40
+        && request.resource.data.platform in ['PlayStation', 'Xbox', 'PC']
+        && request.resource.data.consent == true
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if false;
+    }
+
+    // Catch-all: every other collection (credits, ledger, matches, disputes...)
+    // is closed to the app and the website. Cloud Functions bypass these rules.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
