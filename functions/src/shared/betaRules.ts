@@ -3,9 +3,9 @@
 // To change the rules: edit the text AND bump BETA_RULES_VERSION, so every
 // player is asked to accept the new version once.
 
-export const BETA_RULES_VERSION = 'v1';
+export const BETA_RULES_VERSION = 'v2';
 
-export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v1)';
+export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v2)';
 
 export const BETA_RULES_CONTACT_EMAIL = 'Better.player.one@gmail.com';
 
@@ -32,7 +32,7 @@ export const BETA_RULES: readonly { title: string; text: string }[] = [
   },
   {
     title: 'Your data',
-    text: 'Frantz Benois (Better.player.one@gmail.com) stores your email, gamer tag, game IDs, match history and result screenshots only to run this beta, on Google Firebase. Nothing is sold or used for advertising. Data is deleted when the beta ends or on request. Email us to access, correct or delete your data; you can also complain to the AEPD (aepd.es).',
+    text: 'Frantz Benois (Better.player.one@gmail.com) stores your email, gamer tag, game IDs, match history and result screenshots only to run this beta, on Google Firebase. Nothing is sold or used for advertising. Data is deleted when the beta ends or on request. Email us to access, correct or delete your data; you can also complain to the AEPD (aepd.es). Result screenshots are checked automatically by an AI system (Anthropic) to confirm scores. Any player can dispute a result and a Betterplayer admin will review it.',
   },
 ];
 

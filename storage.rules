@@ -23,16 +23,22 @@ service firebase.storage {
       allow read: if isPlayer(matchId) || isAdmin();
 
       // A player uploads into their own folder only, while the result is being
-      // reported or answered: images only (jpeg, png, webp, heic), max 10 MB.
+      // reported or answered (after the match started, before the response
+      // deadline): images only (jpeg, png, webp), max 10 MB.
       // No file may exist yet at this path (`resource == null`): uploading over
       // an existing file also counts as "create" in Storage rules.
       allow create: if resource == null
         && request.auth != null
         && request.auth.uid == uid
         && isPlayer(matchId)
-        && match_(matchId).status in ['started', 'awaiting_result']
+        && (
+          (match_(matchId).status == 'started'
+            && request.time >= match_(matchId).startedAt)
+          || (match_(matchId).status == 'awaiting_result'
+            && request.time < match_(matchId).responseDeadline)
+        )
         && request.resource.size <= 10 * 1024 * 1024
-        && request.resource.contentType.matches('image/(jpeg|png|webp|heic)');
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
 
       allow update, delete: if false;
     }

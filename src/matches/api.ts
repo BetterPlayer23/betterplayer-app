@@ -67,3 +67,12 @@ export const adminDecide = (input: {
   winnerUid?: string;
   note: string;
 }) => call<{ status: string; winnerUid: string | null }>('adminDecide', input);
+
+// Reverse a match approved automatically (within 24 hours): the correct winner,
+// or cancel & refund. New ledger entries; old ones are never changed.
+export const reverseAutoDecision = (input: {
+  matchId: string;
+  decision: 'override' | 'cancel_refund';
+  winnerUid?: string;
+  note: string;
+}) => call<{ status: string; winnerUid: string | null }>('reverseAutoDecision', input);

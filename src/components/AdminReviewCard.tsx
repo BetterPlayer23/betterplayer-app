@@ -10,6 +10,7 @@ import { ChipSelect } from '@/components/ChipSelect';
 import { FormMessage } from '@/components/FormMessage';
 import { ReportView } from '@/components/ReportView';
 import { TextField } from '@/components/TextField';
+import { VerificationBadge } from '@/components/VerificationBadge';
 import { gameById } from '@/constants/games';
 import { colors, fonts } from '@/constants/theme';
 import { adminDecide, matchError, type Decision } from '@/matches/api';
@@ -68,6 +69,8 @@ export function AdminReviewCard({ match }: { match: Match }) {
         Players: {match.players.map((p) => p.gamerTag).join(', ')} · Pot {formatCredits(match.pot)}{' '}
         · Winner gets {formatCredits(match.winnerGets)}
       </Text>
+
+      <VerificationBadge verification={match.verification} reasons={match.reviewReasons} />
 
       {report ? (
         <ReportView report={report} disputes={disputes.data} players={match.players} />

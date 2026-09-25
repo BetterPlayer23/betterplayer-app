@@ -7,7 +7,8 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ChipSelect } from '@/components/ChipSelect';
 import { FormMessage } from '@/components/FormMessage';
-import { ImagePickerField } from '@/components/ImagePickerField';
+import { CameraField } from '@/components/CameraField';
+import { ResultScreenExample } from '@/components/ResultScreenExample';
 import { TextField } from '@/components/TextField';
 import { gameById } from '@/constants/games';
 import { colors, fonts } from '@/constants/theme';
@@ -49,12 +50,13 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
   }
 
   async function submit() {
+    if (busy) return;
     setError(null);
     setImageError(null);
     if (!winner) return setError('Choose the winner.');
     const checked = checkResult(game!, uids, winner, details());
     if ('error' in checked) return setError(checked.error);
-    if (!image) return setImageError('Add a screenshot of the final result.');
+    if (!image) return setImageError('Take a photo of the final result screen.');
     setBusy(true);
     try {
       const screenshotPath = await uploadResultImage(match.id, uid, image);
@@ -101,6 +103,7 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
       <Text style={styles.help}>
         Only one report per match, and it can’t be edited. The other{' '}
         {uids.length > 2 ? 'players' : 'player'} then have 30 minutes to confirm or dispute it.
+        The photo is checked automatically.
       </Text>
       <ChipSelect
         label="Who won?"
@@ -110,8 +113,9 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
       />
       {scoreRow(fieldLabel, main, setMain)}
       {level && scoreRow('Penalty shoot-out', pens, setPens)}
-      <ImagePickerField
-        label="Screenshot of the final result"
+      <ResultScreenExample game={game} players={match.players} />
+      <CameraField
+        label="Photo of the final result"
         value={image}
         onChange={setImage}
         error={imageError}
@@ -126,6 +130,7 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
         autoCorrect
       />
       {error && <FormMessage kind="error" text={error} />}
+      {busy && <Text style={styles.help}>Checking your photo… this can take a few seconds.</Text>}
       <Button label="Send result" onPress={submit} loading={busy} />
     </Card>
   );

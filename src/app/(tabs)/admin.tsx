@@ -5,18 +5,13 @@ import { AdminReviewCard } from '@/components/AdminReviewCard';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { FormMessage } from '@/components/FormMessage';
+import { PastDecisionRow } from '@/components/PastDecisionRow';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { colors, fonts } from '@/constants/theme';
 import { usePastDecisions, useReviewQueue } from '@/matches/hooks';
 
-const decisionLabels = {
-  approve: 'Approved',
-  override: 'Winner overridden',
-  cancel_refund: 'Cancelled & refunded',
-} as const;
-
 export default function AdminScreen() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const queue = useReviewQueue(isAdmin);
   const past = usePastDecisions(isAdmin);
 
@@ -32,7 +27,7 @@ export default function AdminScreen() {
     <Screen>
       <SectionTitle>Review queue</SectionTitle>
       <Text style={styles.help}>
-        Every match is checked here before credits move. Newest first.
+        Matches the automatic check couldn’t approve, and every disputed match. Newest first.
       </Text>
       {queue.error ? (
         <FormMessage kind="error" text={queue.error} />
@@ -48,19 +43,20 @@ export default function AdminScreen() {
       {past.error ? (
         <FormMessage kind="error" text={past.error} />
       ) : past.data.length === 0 ? (
-        <EmptyState title="No decisions yet" message="Your decisions will be listed here." />
+        <EmptyState
+          title="No decisions yet"
+          message="Admin and automatic decisions will be listed here."
+        />
       ) : (
         <Card style={styles.list}>
           {past.data.map((r, i) => (
-            <Text key={r.id} style={[styles.row, i > 0 && styles.divider]}>
-              <Text style={styles.strong}>{r.gameName}</Text> · {decisionLabels[r.decision]}
-              {r.winnerGamerTag ? ` · ${r.winnerGamerTag} won` : ''}
-              {r.disputed ? ' · disputed' : ''}
-              {'\n'}
-              <Text style={styles.note}>
-                {r.createdAt ? r.createdAt.toDate().toLocaleString('en-GB') : ''} — {r.note}
-              </Text>
-            </Text>
+            <PastDecisionRow
+              key={r.id}
+              review={r}
+              reversed={!r.reverses && past.data.some((x) => x.reverses === r.matchId)}
+              adminUid={user?.uid ?? null}
+              first={i === 0}
+            />
           ))}
         </Card>
       )}
@@ -80,23 +76,5 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingVertical: 4,
-  },
-  row: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.text,
-    paddingVertical: 10,
-  },
-  divider: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  strong: {
-    fontFamily: fonts.bodySemiBold,
-  },
-  note: {
-    fontSize: 13,
-    color: colors.textMuted,
   },
 });

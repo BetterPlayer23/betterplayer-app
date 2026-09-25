@@ -14,6 +14,8 @@ import {
   SHARE_CODE_LENGTH,
   type GameConfig,
   type MatchStatus,
+  type ReviewReason,
+  type Verification,
 } from '../shared/games';
 import { BETA_RULES_VERSION } from '../shared/betaRules';
 
@@ -56,6 +58,11 @@ export type MatchDoc = {
   winnerUid?: string; // final winner after admin decision
   decision?: 'approve' | 'override' | 'cancel_refund';
   settledAt?: Timestamp;
+  // Automatic result check (Claude vision) and auto-approval
+  verification?: Verification & { model?: string; checkedAt?: Timestamp };
+  reviewReasons?: ReviewReason[]; // why it went to an admin
+  decidedBy?: 'admin' | 'vision';
+  reversedAt?: Timestamp; // an admin reversed the automatic decision
 };
 
 // matches/{id}/reports/{uid}: the player's result report (one per player).
@@ -67,6 +74,8 @@ export type ReportDoc = {
   details: Record<string, unknown>;
   notes: string | null;
   screenshotPath: string;
+  imageHash?: string;
+  vision?: unknown; // what the automatic check read on the screenshot
   createdAt: Timestamp;
 };
 

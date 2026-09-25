@@ -2,7 +2,7 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import nodemailer from 'nodemailer';
 
-import { describeResult } from '../shared/games';
+import { REVIEW_REASON_LABELS, describeResult } from '../shared/games';
 import type { DisputeDoc, MatchDoc, ReportDoc } from './common';
 
 export const ALERT_FROM = 'Better.player.one@gmail.com';
@@ -23,12 +23,22 @@ export function buildAlert(
   const lines = [
     'A match needs review.',
     '',
+    `Why: ${
+      (match.reviewReasons ?? []).map((r) => REVIEW_REASON_LABELS[r] ?? r).join(', ') ||
+      REVIEW_REASON_LABELS.not_checked
+    }`,
     `Game: ${match.gameName}`,
     `Players: ${players}`,
     `Reported winner: ${report?.winnerGamerTag ?? 'no report'}`,
     `Score: ${report ? describeResult(report.details, match.players) : '—'}`,
     `Disputed: ${match.disputed ? 'yes' : 'no'}`,
   ];
+  const v = match.verification;
+  lines.push(
+    v
+      ? `Automatic check: ${v.status} (confidence ${Number(v.confidence).toFixed(2)}) – ${v.reason}`
+      : 'Automatic check: not run',
+  );
   if (dispute) lines.push(`Dispute by ${dispute.gamerTag}: ${dispute.reason}`);
   lines.push('', `Review it in the Admin tab: ${APP_URL}`);
   return { subject: `Review needed: ${match.gameName} match`, text: lines.join('\n') };

@@ -67,11 +67,13 @@ jobs:
             echo "::warning::Couldn't grant Storage access to Firestore. Screenshot uploads may be refused."
           fi
 
-      # Secrets (e.g. GMAIL_APP_PASSWORD for admin email alerts):
+      # Secrets: GMAIL_APP_PASSWORD (admin email alerts) and ANTHROPIC_API_KEY
+      # (automatic result check):
       # - let this deploy account manage secrets and give the functions access;
       # - switch on Secret Manager;
       # - create a placeholder if the secret doesn't exist yet, so the deploy
-      #   doesn't fail. The function sends nothing until the real value is set.
+      #   doesn't fail. Emails stay off and every result goes to an admin until
+      #   the real values are set.
       # Only secret NAMES are used here; values are never printed.
       - name: Prepare secrets
         run: |
@@ -80,11 +82,13 @@ jobs:
             --member="serviceAccount:${SA}" --role="roles/secretmanager.admin" \
             --condition=None --quiet > /dev/null
           gcloud services enable secretmanager.googleapis.com --project "$PROJECT" --quiet
-          if ! gcloud secrets describe GMAIL_APP_PASSWORD --project "$PROJECT" > /dev/null 2>&1; then
-            printf 'not-set' | gcloud secrets create GMAIL_APP_PASSWORD --project "$PROJECT" \
-              --replication-policy=automatic --labels=firebase-managed=true --data-file=- --quiet
-            echo "::warning::GMAIL_APP_PASSWORD was missing; created a placeholder. Admin email alerts stay off until the real app password is set."
-          fi
+          for NAME in GMAIL_APP_PASSWORD ANTHROPIC_API_KEY; do
+            if ! gcloud secrets describe "$NAME" --project "$PROJECT" > /dev/null 2>&1; then
+              printf 'not-set' | gcloud secrets create "$NAME" --project "$PROJECT" \
+                --replication-policy=automatic --labels=firebase-managed=true --data-file=- --quiet
+              echo "::warning::$NAME was missing; created a placeholder. Set the real value, then run this workflow again."
+            fi
+          done
 
       # --non-interactive: nobody is there to answer questions.
       # --force: set up the cleanup policy for old function builds, and remove

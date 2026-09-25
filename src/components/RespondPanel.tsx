@@ -6,7 +6,7 @@ import { DISPUTE_REASON_MAX, DISPUTE_REASON_MIN } from '@shared/games';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { FormMessage } from '@/components/FormMessage';
-import { ImagePickerField } from '@/components/ImagePickerField';
+import { CameraField } from '@/components/CameraField';
 import { TextField } from '@/components/TextField';
 import { colors, fonts } from '@/constants/theme';
 import { confirmResult, disputeResult, matchError } from '@/matches/api';
@@ -98,8 +98,8 @@ export function RespondPanel({ match, uid }: { match: Match; uid: string }) {
             autoCapitalize="sentences"
             autoCorrect
           />
-          <ImagePickerField
-            label="Your screenshot (optional)"
+          <CameraField
+            label="Your photo (optional)"
             value={evidence}
             onChange={setEvidence}
           />

@@ -23,7 +23,8 @@ Players must be **18+** and in **Spain**.
    Functions update in the **same transaction** as the ledger entry it reflects.
 4. **No secrets in the app.** Anything in the app ships to every user. The Firebase
    web config in `src/firebase/config.ts` is public by design; API keys for other
-   services, admin credentials and service accounts belong in Cloud Functions.
+   services (e.g. `ANTHROPIC_API_KEY`), admin credentials and service accounts belong
+   in Cloud Functions (Secret Manager).
 
 ## Game rules
 
@@ -42,8 +43,10 @@ Players must be **18+** and in **Spain**.
 - **Winner takes all:** in every game the single winner gets the whole 80% left
   after the fee. Nobody else in the match gets credits back.
 - A player can play **at most 10 matches per day**.
-- **A Betterplayer admin validates every match before any credits move.**
-  Until then the match shows as "awaiting result".
+- **No credits move until a match is validated**: either approved automatically by
+  the photo check (only when `config/review.autoApprove` is on and every condition
+  in "Automatic result check" holds) or decided by a Betterplayer admin. Until then
+  the match shows as "awaiting result" / "under review".
 
 ## Words in the app
 
@@ -119,6 +122,8 @@ Players must be **18+** and in **Spain**.
   for existing players, once at next login; checkbox "I am 18+ and accept the beta
   rules"). Read-only `src/app/beta-rules.tsx`, linked from Profile and Sign up.
 - `createMatch` / `joinMatch` refuse players who haven't accepted the current version.
+- Current version: **v2** (section 6 says screenshots are checked by an AI system
+  (Anthropic) and any player can dispute).
 
 ## Credits data
 
@@ -135,7 +140,11 @@ Players must be **18+** and in **Spain**.
   - `stake_returned`: label only for now ("Entry returned"); nothing writes it yet.
 - App labels: "Starter credits", "Entry locked: [game] match", "Winnings",
   "Entry lost", "Entry returned", "Refund". Never "stake" on screen.
+  - `correction` / `refund` (`reverse_{matchId}_{uid}`, lockedDelta 0): an admin
+    reversing an automatic decision. Never edits the old `settle_…` entries.
 - `platform_ledger/{matchId}`: the 20% fee per completed match (server-only).
+  `platform_ledger/{matchId}_reversal` gives the fee back (negative) when a reversal
+  cancels the match.
 - `wallets/{uid}`: `available`, `locked`, `updatedAt`. Owner can read; nobody writes
   from the app.
 - Every Cloud Function that moves credits must be idempotent (safe to run twice)
@@ -180,36 +189,84 @@ Players must be **18+** and in **Spain**.
   Clash Royale crowns 0–3 (no level results), Warzone/Fortnite distinct placements
   (1 = best). The winner must match the score.
 - Screenshots: Storage `results/{matchId}/{uid}/{file}`. A player of a started or
-  awaiting match uploads into their own folder only; jpeg/png/webp/heic, ≤ 10 MB;
+  awaiting match uploads into their own folder only, after `startedAt` and before
+  `responseDeadline`; jpeg/png/webp (no HEIC: the server can't read it), ≤ 10 MB;
   never overwritten or deleted (`resource == null` on create). Players of the match
-  and admins can read. Functions check the file exists and is in the caller's folder.
+  and admins can read. Functions check the file exists, is in the caller's folder,
+  was uploaded inside the match window, and isn't a (near-)duplicate.
+- The app opens the **camera only** (`src/matches/upload.ts` `takePhoto`): on the web a
+  file input with `accept="image/*" capture="environment"`; native uses the system
+  camera for now (expo-camera later). `src/components/ResultScreenExample.tsx` shows
+  a drawn example of the right screen per game (`resultScreen` in shared games).
 - Admins: a document at `admins/{uid}`, created by hand in the Firebase console.
   The Admin tab shows only for them. `adminDecide(decision, winnerUid?, note)`:
   `approve` (reported winner), `override` (another player), `cancel_refund`.
-  Note required (3–500 chars). Writes `admin_reviews/{matchId}`.
+  Note required (3–500 chars). Writes `admin_reviews/{matchId}` (`decidedBy`
+  `admin` or `vision`, `players`).
 - An admin can never decide a match they played in: `adminDecide` refuses with
   "You can't review a match you played in", and the Admin tab shows "You played in
   this match, another admin must review it" with the buttons disabled.
-- Settlement is one idempotent transaction in `functions/src/matches/admin.ts`.
+- Settlement is one idempotent transaction in `functions/src/matches/admin.ts`
+  (`prepareSettlement` reads, `writeSettlement` writes), shared by `adminDecide` and
+  automatic approval.
 - Reputation `reputation/{uid}` {points, matchesCompleted, disputesLost}, server-only,
   owner-readable: +1 per completed match; −5 (and disputesLost +1) when your report
   is overridden or your dispute is rejected. Cancel & refund changes nothing.
+
+## Automatic result check (Claude vision)
+
+- All server-side (`functions/src/matches/vision.ts`, europe-west1). `submitResult`
+  (timeout 120 s, 512 MiB) loads the photo with `sharp`, checks timing and duplicates,
+  then sends it to the Anthropic Messages API (`@anthropic-ai/sdk`) with a per-game
+  hint and a JSON schema: `playerNames`, `scores`, `winnerName`, `isFinalScreen`,
+  `confidence` (0–1), `notes`. The prompt never contains the reported names/score.
+- API key: Firebase secret `ANTHROPIC_API_KEY` (Secret Manager), never in code. Missing
+  / placeholder key or API error → the report is still accepted with verification
+  `unreadable` and an admin reviews it.
+- `config/review` (created by hand in the console; server-only): `autoApprove`
+  (default false), `threshold` (default 0.9), `visionModel` (default `claude-sonnet-5`).
+- The server compares the reading with the players' saved game IDs (or gamer tags;
+  tolerant: case/accents/symbols ignored, clan tags, ~1 in 5 letters misread) and
+  with the reported score and winner, and saves `matches/{id}.verification`
+  `{status: match|mismatch|unreadable, confidence, reason, similarTo?, model}`;
+  the raw reading goes on the report (`vision`).
+- Duplicates: 256-bit difference hash + SHA-256 of every accepted result image in
+  `imageHashes/{matchId}_{uid}_{report|dispute}` (server-only). ≤ 26 bits apart →
+  refused; ≤ 48 → accepted but flagged `similarTo` (never auto-approved).
+- Auto-approval happens at the moment a match would go to `under_review`
+  (everyone confirmed, or the 30-minute window closed), in the same transaction:
+  `autoReviewReasons` in shared games must be empty (auto-approve on, no dispute,
+  status `match`, confidence ≥ threshold, no look-alike). Then it settles like an
+  admin Approve, with `decidedBy: "vision"`, `adminUid: null`. Otherwise the match
+  goes to `under_review` with `reviewReasons` (dispute, mismatch, low_confidence,
+  unreadable, duplicate, not_checked, auto_off).
+- Admin tab: `VerificationBadge` on queued matches; Past decisions label automatic
+  ones "Auto (Vision)". `reverseAutoDecision(matchId, override|cancel_refund,
+  winnerUid?, note)`: admins only, not their own match, within 24 h of an automatic
+  decision, once (`admin_reviews/{matchId}_reversal`). New ledger entries only
+  (see Credits data); the wrong reporter gets −5 on override; cancel removes the +1
+  completed match.
+- Emulator tests: in the emulator the API is never called; the answer comes from
+  `_emulator/visionMock` (`{reading}` or `{error}`) and the request is saved in
+  `_emulator/visionLastCall`.
 
 ## Admin email alerts
 
 - `alertAdminOnReview` (`functions/src/matches/alerts.ts`, trigger on `matches/{id}`
   updates): when a match becomes `under_review`, emails `frantzbenois+admin@gmail.com`
   from `Better.player.one@gmail.com` via Gmail SMTP (nodemailer). Subject
-  "Review needed: [game] match"; body: game, players, reported winner + score,
-  disputed yes/no (+ reason), app link. Once per match (`adminAlerts/{matchId}`,
+  "Review needed: [game] match"; body: why it needs review (`reviewReasons`), game,
+  players, reported winner + score, disputed yes/no (+ reason), automatic check
+  result, app link. Once per match (`adminAlerts/{matchId}`,
   server-only). `retry: false`.
 - The Gmail **app password** is the Firebase secret `GMAIL_APP_PASSWORD` (Secret
   Manager), never in code. The deploy workflow grants the `github-deploy` account
-  Secret Manager Admin and creates a `not-set` placeholder if the secret is missing;
+  Secret Manager Admin and creates a `not-set` placeholder if a secret
+  (`GMAIL_APP_PASSWORD`, `ANTHROPIC_API_KEY`) is missing;
   with the placeholder the function logs a warning and sends nothing. After setting
   the real value, **redeploy** (Actions → Firebase deploy → Run workflow): functions
   use the secret version that was current at deploy time.
-- Emulator tests: put `GMAIL_APP_PASSWORD=...` in `functions/.secret.local`
+- Emulator tests: put `GMAIL_APP_PASSWORD=...` and `ANTHROPIC_API_KEY=...` in `functions/.secret.local`
   (git-ignored); in the emulator mail is only built (jsonTransport), never sent.
 
 ## Look and feel

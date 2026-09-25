@@ -1,6 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 
-import type { MatchStatus } from '@shared/games';
+import type { MatchStatus, ReviewReason, Verification } from '@shared/games';
 
 // matches/{id}, written only by Cloud Functions (functions/src/matches).
 export type MatchPlayer = {
@@ -39,6 +39,11 @@ export type Match = {
   winnerUid?: string;
   decision?: 'approve' | 'override' | 'cancel_refund';
   settledAt?: Timestamp;
+  // Automatic result check (Claude vision)
+  verification?: Verification & { model?: string; checkedAt?: Timestamp };
+  reviewReasons?: ReviewReason[];
+  decidedBy?: 'admin' | 'vision';
+  reversedAt?: Timestamp;
 };
 
 export const statusLabels: Record<MatchStatus, string> = {

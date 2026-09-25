@@ -129,7 +129,10 @@ function Room({ match }: { match: Match }) {
           <Text style={styles.label}>Winner</Text>
           <Text style={styles.winner}>{winnerTag ?? '—'}</Text>
           <Text style={styles.body}>
-            Checked by a Betterplayer admin. {winnerTag} got {formatCredits(match.winnerGets)}{' '}
+            {match.decidedBy === 'vision'
+              ? 'Approved automatically after the photo check.'
+              : 'Checked by a Betterplayer admin.'}{' '}
+            {winnerTag} got {formatCredits(match.winnerGets)}{' '}
             credits.{match.winnerUid === uid ? ' Well played!' : ''}
           </Text>
         </Card>
@@ -151,7 +154,7 @@ function Room({ match }: { match: Match }) {
           text={
             match.disputed
               ? 'The result was disputed. A Betterplayer admin is checking it and will decide.'
-              : 'Result confirmed. A Betterplayer admin is checking it before any credits move.'
+              : 'Result confirmed. The automatic check couldn’t approve it, so a Betterplayer admin is checking it before any credits move.'
           }
         />
       )}

@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/firestore';
-import { onCall, type CallableRequest } from 'firebase-functions/https';
+import { onCall, type CallableOptions, type CallableRequest } from 'firebase-functions/https';
 import { setGlobalOptions } from 'firebase-functions/options';
 import { defineSecret } from 'firebase-functions/params';
 import { onSchedule } from 'firebase-functions/scheduler';
@@ -40,8 +40,8 @@ type Action = (
   data: Record<string, unknown> | undefined,
 ) => Promise<unknown>;
 
-const callable = (action: Action) =>
-  onCall(async (request: CallableRequest<Record<string, unknown> | undefined>) => {
+const callable = (action: Action, options: CallableOptions = {}) =>
+  onCall(options, async (request: CallableRequest<Record<string, unknown> | undefined>) => {
     const uid = requireUid(request.auth);
     return action(getFirestore(), uid, request.data);
   });
@@ -54,10 +54,23 @@ export const startMatch = callable(matches.startMatch);
 export const cancelMatch = callable(matches.cancelMatch);
 
 // ---- Results and review (round B)
-export const submitResult = callable(results.submitResult);
+// The Anthropic API key (automatic result check) lives in Secret Manager
+// (Firebase secret), never in code.
+const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
+
+// Reporting a result runs the automatic check (Claude vision) on the screenshot.
+export const submitResult = onCall(
+  { secrets: [anthropicApiKey], timeoutSeconds: 120, memory: '512MiB' },
+  async (request: CallableRequest<Record<string, unknown> | undefined>) => {
+    const uid = requireUid(request.auth);
+    return results.submitResult(getFirestore(), uid, request.data, new Date(), anthropicApiKey.value());
+  },
+);
 export const confirmResult = callable(results.confirmResult);
-export const disputeResult = callable(results.disputeResult);
+// Dispute photos are checked for duplicates, which needs more memory.
+export const disputeResult = callable(results.disputeResult, { memory: '512MiB' });
 export const adminDecide = callable(admin.adminDecide);
+export const reverseAutoDecision = callable(admin.reverseAutoDecision);
 
 // Every 5 minutes: results nobody responded to within 30 minutes go to review
 // (silence counts as confirmation).

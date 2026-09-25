@@ -17,6 +17,9 @@ export type GameConfig = {
   gameIdKey: GameIdKey; // which profile game ID a player needs
   gameIdLabel: string;
   resultKind: ResultKind;
+  // The screen to photograph for the result (shown in the app, and given to
+  // the automatic check as a hint).
+  resultScreen: string;
 };
 
 export const GAMES: readonly GameConfig[] = [
@@ -30,6 +33,8 @@ export const GAMES: readonly GameConfig[] = [
     gameIdKey: 'eaId',
     gameIdLabel: 'EA ID',
     resultKind: 'goals',
+    resultScreen:
+      'The full-time screen after the final whistle: the final score and both players’ names at the top.',
   },
   {
     id: 'clash-royale',
@@ -41,6 +46,8 @@ export const GAMES: readonly GameConfig[] = [
     gameIdKey: 'clashRoyaleTag',
     gameIdLabel: 'Clash Royale player tag',
     resultKind: 'crowns',
+    resultScreen:
+      'The battle result screen: both players’ names and the crowns each one won.',
   },
   {
     id: 'warzone-rebirth',
@@ -52,6 +59,8 @@ export const GAMES: readonly GameConfig[] = [
     gameIdKey: 'activisionId',
     gameIdLabel: 'Activision ID',
     resultKind: 'placement',
+    resultScreen:
+      'The end-of-match scoreboard: every Betterplayer player’s name and placement.',
   },
   {
     id: 'fortnite',
@@ -63,6 +72,8 @@ export const GAMES: readonly GameConfig[] = [
     gameIdKey: 'epicName',
     gameIdLabel: 'Epic display name',
     resultKind: 'placement',
+    resultScreen:
+      'The end-of-match scoreboard: every Betterplayer player’s name and placement.',
   },
 ];
 
@@ -108,7 +119,59 @@ export const DISPUTE_REASON_MAX = 500;
 export const ADMIN_NOTE_MIN = 3;
 export const ADMIN_NOTE_MAX = 500;
 export const SCREENSHOT_MAX_BYTES = 10 * 1024 * 1024;
-export const SCREENSHOT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+export const SCREENSHOT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+// ---- Automatic result check (Claude vision) and auto-approval
+export type VerificationStatus = 'match' | 'mismatch' | 'unreadable';
+export type Verification = {
+  status: VerificationStatus;
+  confidence: number; // 0–1
+  reason: string;
+  similarTo?: string | null; // an earlier image this one looks very like
+};
+export const DEFAULT_VISION_MODEL = 'claude-sonnet-5';
+export const DEFAULT_AUTO_THRESHOLD = 0.9;
+export const REVERSAL_HOURS = 24; // admins can reverse an automatic decision this long
+
+// Why a match went to an admin instead of being approved automatically.
+export type ReviewReason =
+  | 'dispute'
+  | 'mismatch'
+  | 'low_confidence'
+  | 'unreadable'
+  | 'duplicate'
+  | 'not_checked'
+  | 'auto_off';
+export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
+  dispute: 'Disputed by a player',
+  mismatch: 'Screenshot doesn’t match the report',
+  low_confidence: 'Low confidence',
+  unreadable: 'Screenshot unreadable',
+  duplicate: 'Looks like an earlier screenshot',
+  not_checked: 'Not checked automatically',
+  auto_off: 'Auto-approval is off',
+};
+
+/**
+ * The reasons a match can't be approved automatically (empty = approve it).
+ * Auto-approval needs: auto-approval on, no dispute, a "match" verification
+ * with confidence >= threshold, and no near-duplicate image.
+ */
+export function autoReviewReasons(
+  config: { autoApprove: boolean; threshold: number },
+  disputed: boolean,
+  verification: Verification | null | undefined,
+): ReviewReason[] {
+  const reasons: ReviewReason[] = [];
+  if (disputed) reasons.push('dispute');
+  if (!verification) reasons.push('not_checked');
+  else if (verification.status === 'mismatch') reasons.push('mismatch');
+  else if (verification.status === 'unreadable') reasons.push('unreadable');
+  else if (!(verification.confidence >= config.threshold)) reasons.push('low_confidence');
+  if (verification?.similarTo) reasons.push('duplicate');
+  if (!config.autoApprove) reasons.push('auto_off');
+  return reasons;
+}
 
 export const REPUTATION_COMPLETED = 1; // each player of a completed match
 export const REPUTATION_PENALTY = -5; // report overridden, or dispute rejected

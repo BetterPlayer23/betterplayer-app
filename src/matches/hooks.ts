@@ -173,8 +173,13 @@ export type AdminReview = {
   matchId: string;
   gameName: string;
   decision: 'approve' | 'override' | 'cancel_refund';
+  decidedBy?: 'admin' | 'vision'; // missing on decisions made before auto-approval existed
+  winner: string | null;
   winnerGamerTag: string | null;
   disputed: boolean;
+  players?: { uid: string; gamerTag: string }[];
+  verification?: import('@shared/games').Verification;
+  reverses?: string; // set on a reversal: the match whose automatic decision it reverses
   note: string;
   createdAt: import('firebase/firestore').Timestamp | null;
 };
