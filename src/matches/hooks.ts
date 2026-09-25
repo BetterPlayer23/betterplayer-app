@@ -105,3 +105,99 @@ export function useMatch(id: string | undefined): Live<Match | null> {
 
   return state;
 }
+
+// ---- Round B
+
+export type Report = {
+  uid: string;
+  gamerTag: string;
+  winnerUid: string;
+  winnerGamerTag: string;
+  details: import('@shared/games').ResultDetails;
+  notes: string | null;
+  screenshotPath: string;
+};
+
+export type Dispute = {
+  uid: string;
+  gamerTag: string;
+  reason: string;
+  evidencePath: string | null;
+};
+
+// Reports or disputes of a match (players of the match and admins can read).
+function useSub<T>(matchId: string | undefined, sub: 'reports' | 'disputes', enabled: boolean) {
+  const [state, setState] = useState<Live<T[]>>({ data: [], loading: true, error: null });
+  useEffect(() => {
+    if (!matchId || !enabled) {
+      setState({ data: [], loading: false, error: null });
+      return;
+    }
+    return onSnapshot(
+      collection(db, 'matches', matchId, sub),
+      (snap) =>
+        setState({ data: snap.docs.map((d) => d.data() as T), loading: false, error: null }),
+      () => setState((s) => ({ ...s, loading: false, error: LOAD_ERROR })),
+    );
+  }, [matchId, sub, enabled]);
+  return state;
+}
+
+export const useReports = (matchId: string | undefined, enabled = true) =>
+  useSub<Report>(matchId, 'reports', enabled);
+export const useDisputes = (matchId: string | undefined, enabled = true) =>
+  useSub<Dispute>(matchId, 'disputes', enabled);
+
+// Admin queue: matches under review, newest first.
+export function useReviewQueue(enabled: boolean): Live<Match[]> {
+  const [state, setState] = useState<Live<Match[]>>({ data: [], loading: true, error: null });
+  useEffect(() => {
+    if (!enabled) return;
+    const q = query(
+      collection(db, 'matches'),
+      where('status', '==', 'under_review'),
+      orderBy('reviewAt', 'desc'),
+      limit(50),
+    );
+    return onSnapshot(
+      q,
+      (snap) => setState({ data: snap.docs.map(toMatch), loading: false, error: null }),
+      () => setState((s) => ({ ...s, loading: false, error: LOAD_ERROR })),
+    );
+  }, [enabled]);
+  return state;
+}
+
+export type AdminReview = {
+  id: string;
+  matchId: string;
+  gameName: string;
+  decision: 'approve' | 'override' | 'cancel_refund';
+  winnerGamerTag: string | null;
+  disputed: boolean;
+  note: string;
+  createdAt: import('firebase/firestore').Timestamp | null;
+};
+
+export function usePastDecisions(enabled: boolean): Live<AdminReview[]> {
+  const [state, setState] = useState<Live<AdminReview[]>>({
+    data: [],
+    loading: true,
+    error: null,
+  });
+  useEffect(() => {
+    if (!enabled) return;
+    const q = query(collection(db, 'admin_reviews'), orderBy('createdAt', 'desc'), limit(20));
+    return onSnapshot(
+      q,
+      (snap) =>
+        setState({
+          data: snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AdminReview, 'id'>) })),
+          loading: false,
+          error: null,
+        }),
+      () => setState((s) => ({ ...s, loading: false, error: LOAD_ERROR })),
+    );
+  }, [enabled]);
+  return state;
+}

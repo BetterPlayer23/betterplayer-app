@@ -18,4 +18,4 @@ if ! gcloud auth print-access-token >/dev/null; then
 fi
 
 npm --prefix functions ci
-firebase deploy --only functions,firestore:rules,firestore:indexes --project betterplayer-beta
+firebase deploy --only functions,firestore:rules,firestore:indexes,storage --project betterplayer-beta

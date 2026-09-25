@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// Betterplayer Storage rules. Deployed by ./deploy.sh.
+// Result screenshots live at results/{matchId}/{uid}/{fileName}.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function match_(matchId) {
+      return firestore.get(/databases/(default)/documents/matches/$(matchId)).data;
+    }
+
+    function isPlayer(matchId) {
+      return request.auth != null && request.auth.uid in match_(matchId).playerUids;
+    }
+
+    function isAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    match /results/{matchId}/{uid}/{fileName} {
+      // Players of the match and admins can see screenshots.
+      allow read: if isPlayer(matchId) || isAdmin();
+
+      // A player uploads into their own folder only, while the result is being
+      // reported or answered: images only (jpeg, png, webp, heic), max 10 MB.
+      // No file may exist yet at this path (`resource == null`): uploading over
+      // an existing file also counts as "create" in Storage rules.
+      allow create: if resource == null
+        && request.auth != null
+        && request.auth.uid == uid
+        && isPlayer(matchId)
+        && match_(matchId).status in ['started', 'awaiting_result']
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic)');
+
+      allow update, delete: if false;
+    }
+
+    // Everything else is closed.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

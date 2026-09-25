@@ -41,3 +41,29 @@ export const setLobbyCode = (matchId: string, code: string) =>
 export const startMatch = (matchId: string) => call('startMatch', { matchId });
 
 export const cancelMatch = (matchId: string) => call('cancelMatch', { matchId });
+
+// ---- Round B: results and review
+
+export type ResultInput = {
+  matchId: string;
+  winnerUid: string;
+  details: Record<string, unknown>;
+  screenshotPath: string;
+  notes?: string;
+};
+
+export const submitResult = (input: ResultInput) => call('submitResult', input);
+
+export const confirmResult = (matchId: string) => call('confirmResult', { matchId });
+
+export const disputeResult = (matchId: string, reason: string, evidencePath?: string) =>
+  call('disputeResult', { matchId, reason, ...(evidencePath && { evidencePath }) });
+
+export type Decision = 'approve' | 'override' | 'cancel_refund';
+
+export const adminDecide = (input: {
+  matchId: string;
+  decision: Decision;
+  winnerUid?: string;
+  note: string;
+}) => call<{ status: string; winnerUid: string | null }>('adminDecide', input);

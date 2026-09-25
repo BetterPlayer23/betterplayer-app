@@ -14,6 +14,17 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    // Admins have a document at admins/{uid}, created by hand in the console.
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isMatchPlayer(matchId) {
+      return request.auth != null
+        && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.playerUids;
+    }
+
     function validGamerTag(tag) {
       return tag is string && tag.matches('^[A-Za-z0-9_]{3,20}$');
     }
@@ -80,6 +91,36 @@ service cloud.firestore {
     // Only Cloud Functions create or change them.
     match /matches/{matchId} {
       allow read: if request.auth != null;
+      allow write: if false;
+
+      // Result reports and disputes: players of this match and admins can read.
+      // Only Cloud Functions write them.
+      match /reports/{uid} {
+        allow read: if isMatchPlayer(matchId) || isAdmin();
+        allow write: if false;
+      }
+      match /disputes/{uid} {
+        allow read: if isMatchPlayer(matchId) || isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // admin_reviews/{matchId}: admin decisions. Admins read; functions write.
+    match /admin_reviews/{reviewId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // admins/{uid}: a player can check whether they are an admin (to show the
+    // Admin tab). Created by hand in the console, never from the app.
+    match /admins/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // reputation/{uid}: server-only, readable by its owner.
+    match /reputation/{uid} {
+      allow read: if isOwner(uid);
       allow write: if false;
     }
 

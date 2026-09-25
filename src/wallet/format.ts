@@ -13,6 +13,10 @@ export function formatSignedCredits(n: number): string {
 const typeLabels: Record<string, string> = {
   starter_grant: 'Starter credits',
   stake_lock: 'Entry locked',
+  winnings: 'Winnings',
+  stake_returned: 'Entry returned',
+  stake_lost: 'Entry lost',
+  refund: 'Refund',
   match_entry: 'Match entry',
   match_win: 'Match win',
   entry_returned: 'Entry returned',
@@ -23,6 +27,27 @@ export function ledgerLabel(type: string, description: string): string {
   // Entry locks carry the game in their description: "Entry locked: EA FC match".
   if (type === 'stake_lock' && description) return description;
   return typeLabels[type] ?? (description || 'Credits');
+}
+
+// What an entry did to "available" credits, for the history amount.
+// Entry locks and losses only touch locked credits, so they show separately.
+export function historyAmount(
+  type: string,
+  amount: number,
+): { text: string; tone: 'gain' | 'neutral' | 'loss' } {
+  switch (type) {
+    case 'stake_lock':
+      return { text: `${formatCredits(amount)} locked`, tone: 'neutral' };
+    case 'stake_lost':
+      return { text: `−${formatCredits(amount)}`, tone: 'loss' };
+    case 'winnings':
+    case 'refund':
+    case 'stake_returned':
+    case 'starter_grant':
+      return { text: `+${formatCredits(amount)}`, tone: 'gain' };
+    default:
+      return { text: formatSignedCredits(amount), tone: amount > 0 ? 'gain' : 'neutral' };
+  }
 }
 
 // Entry locks move credits from available to locked; they aren't spent yet.

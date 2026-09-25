@@ -3,6 +3,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { AppHeader } from '@/components/AppHeader';
 import { CreateTabButton } from '@/components/CreateTabButton';
 import { colors, fonts } from '@/constants/theme';
@@ -13,6 +14,7 @@ function TabIcon({ name, color }: { name: SymbolViewProps['name']; color: ColorV
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const { isAdmin } = useAuth();
 
   return (
     <Tabs
@@ -45,7 +47,11 @@ export default function TabLayout() {
           title: 'Matches',
           tabBarIcon: ({ color }) => (
             <TabIcon
-              name={{ ios: 'gamecontroller.fill', android: 'sports_esports', web: 'sports_esports' }}
+              name={{
+                ios: 'gamecontroller.fill',
+                android: 'sports_esports',
+                web: 'sports_esports',
+              }}
               color={color}
             />
           ),
@@ -81,6 +87,20 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <TabIcon
               name={{ ios: 'person.crop.circle.fill', android: 'person', web: 'person' }}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'Admin',
+          // Only admins (admins/{uid} exists) see this tab.
+          href: isAdmin ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <TabIcon
+              name={{ ios: 'checkmark.shield.fill', android: 'shield', web: 'shield' }}
               color={color}
             />
           ),

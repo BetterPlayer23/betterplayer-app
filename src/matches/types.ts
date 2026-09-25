@@ -29,7 +29,16 @@ export type Match = {
   createdAt: Timestamp | null;
   expiresAt: Timestamp | null;
   startedAt?: Timestamp;
-  cancelReason?: 'host' | 'expired';
+  cancelReason?: 'host' | 'expired' | 'admin_refund';
+  // Round B
+  reportedByUid?: string;
+  responseDeadline?: Timestamp;
+  confirmedUids?: string[];
+  disputed?: boolean;
+  reviewAt?: Timestamp;
+  winnerUid?: string;
+  decision?: 'approve' | 'override' | 'cancel_refund';
+  settledAt?: Timestamp;
 };
 
 export const statusLabels: Record<MatchStatus, string> = {

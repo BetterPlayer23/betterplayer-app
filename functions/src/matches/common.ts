@@ -44,7 +44,38 @@ export type MatchDoc = {
   expiresAt: Timestamp;
   startedAt?: Timestamp;
   cancelledAt?: Timestamp;
-  cancelReason?: 'host' | 'expired';
+  cancelReason?: 'host' | 'expired' | 'admin_refund';
+  // Round B: results and review
+  reportedByUid?: string;
+  reportedAt?: Timestamp;
+  responseDeadline?: Timestamp;
+  confirmedUids?: string[];
+  disputed?: boolean;
+  reviewAt?: Timestamp; // when it went to under_review (admin queue order)
+  winnerUid?: string; // final winner after admin decision
+  decision?: 'approve' | 'override' | 'cancel_refund';
+  settledAt?: Timestamp;
+};
+
+// matches/{id}/reports/{uid}: the player's result report (one per player).
+export type ReportDoc = {
+  uid: string;
+  gamerTag: string;
+  winnerUid: string;
+  winnerGamerTag: string;
+  details: Record<string, unknown>;
+  notes: string | null;
+  screenshotPath: string;
+  createdAt: Timestamp;
+};
+
+// matches/{id}/disputes/{uid}
+export type DisputeDoc = {
+  uid: string;
+  gamerTag: string;
+  reason: string;
+  evidencePath: string | null;
+  createdAt: Timestamp;
 };
 
 // Plain-language errors. The app shows `message` as is.

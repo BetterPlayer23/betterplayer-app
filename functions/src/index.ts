@@ -7,6 +7,8 @@ import { setGlobalOptions } from 'firebase-functions/options';
 import { onSchedule } from 'firebase-functions/scheduler';
 
 import * as matches from './matches/actions';
+import * as admin from './matches/admin';
+import * as results from './matches/results';
 import { requireUid } from './matches/common';
 import { grantStarterCredits } from './starterGrant';
 
@@ -46,6 +48,22 @@ export const leaveMatch = callable(matches.leaveMatch);
 export const setLobbyCode = callable(matches.setLobbyCode);
 export const startMatch = callable(matches.startMatch);
 export const cancelMatch = callable(matches.cancelMatch);
+
+// ---- Results and review (round B)
+export const submitResult = callable(results.submitResult);
+export const confirmResult = callable(results.confirmResult);
+export const disputeResult = callable(results.disputeResult);
+export const adminDecide = callable(admin.adminDecide);
+
+// Every 5 minutes: results nobody responded to within 30 minutes go to review
+// (silence counts as confirmation).
+export const closeResponseWindows = onSchedule(
+  { schedule: 'every 5 minutes', timeZone: 'Europe/Madrid' },
+  async () => {
+    const count = await results.closeResponseWindows(getFirestore());
+    if (count) logger.info('Moved matches to review after the deadline', { count });
+  },
+);
 
 // Every 5 minutes: cancel open matches nobody filled within 15 minutes.
 export const expireOpenMatches = onSchedule(

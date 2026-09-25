@@ -4,6 +4,8 @@
 
 export type GameId = 'eafc' | 'clash-royale' | 'warzone-rebirth' | 'fortnite';
 export type GameIdKey = 'eaId' | 'clashRoyaleTag' | 'activisionId' | 'epicName';
+// How a result is reported: goals (+ penalties if level), crowns, or placement.
+export type ResultKind = 'goals' | 'crowns' | 'placement';
 
 export type GameConfig = {
   id: GameId;
@@ -14,6 +16,7 @@ export type GameConfig = {
   rules: string; // how the winner is decided
   gameIdKey: GameIdKey; // which profile game ID a player needs
   gameIdLabel: string;
+  resultKind: ResultKind;
 };
 
 export const GAMES: readonly GameConfig[] = [
@@ -26,6 +29,7 @@ export const GAMES: readonly GameConfig[] = [
     rules: 'Play an online friendly. A draw is decided on penalties.',
     gameIdKey: 'eaId',
     gameIdLabel: 'EA ID',
+    resultKind: 'goals',
   },
   {
     id: 'clash-royale',
@@ -36,6 +40,7 @@ export const GAMES: readonly GameConfig[] = [
     rules: 'Play a 1v1 friendly battle.',
     gameIdKey: 'clashRoyaleTag',
     gameIdLabel: 'Clash Royale player tag',
+    resultKind: 'crowns',
   },
   {
     id: 'warzone-rebirth',
@@ -46,6 +51,7 @@ export const GAMES: readonly GameConfig[] = [
     rules: 'Play a private match. Best placement among Betterplayer players wins.',
     gameIdKey: 'activisionId',
     gameIdLabel: 'Activision ID',
+    resultKind: 'placement',
   },
   {
     id: 'fortnite',
@@ -56,6 +62,7 @@ export const GAMES: readonly GameConfig[] = [
     rules: 'Play a private match. Best placement among Betterplayer players wins.',
     gameIdKey: 'epicName',
     gameIdLabel: 'Epic display name',
+    resultKind: 'placement',
   },
 ];
 
@@ -91,3 +98,121 @@ export function matchMoney(players: number) {
 // Share codes: 6 characters, no 0/O/1/I so they're easy to read out loud.
 export const SHARE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const SHARE_CODE_LENGTH = 6;
+
+// ---------- Results (round B) ----------
+
+export const RESPONSE_MINUTES = 30; // time other players have to confirm or dispute
+export const NOTES_MAX = 500;
+export const DISPUTE_REASON_MIN = 10;
+export const DISPUTE_REASON_MAX = 500;
+export const ADMIN_NOTE_MIN = 3;
+export const ADMIN_NOTE_MAX = 500;
+export const SCREENSHOT_MAX_BYTES = 10 * 1024 * 1024;
+export const SCREENSHOT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+
+export const REPUTATION_COMPLETED = 1; // each player of a completed match
+export const REPUTATION_PENALTY = -5; // report overridden, or dispute rejected
+
+// Per-player numbers keyed by uid.
+export type ScoreMap = Record<string, number>;
+export type ResultDetails = {
+  goals?: ScoreMap;
+  penalties?: ScoreMap; // EA FC only, only when goals are level
+  crowns?: ScoreMap;
+  placements?: ScoreMap; // 1 = best
+};
+
+const LIMITS: Record<ResultKind, { min: number; max: number; label: string }> = {
+  goals: { min: 0, max: 99, label: 'Goals' },
+  crowns: { min: 0, max: 3, label: 'Crowns' },
+  placement: { min: 1, max: 150, label: 'Placement' },
+};
+
+function readScores(
+  raw: unknown,
+  uids: string[],
+  min: number,
+  max: number,
+  label: string,
+): ScoreMap | string {
+  if (!raw || typeof raw !== 'object') return `Enter the ${label.toLowerCase()} for every player.`;
+  const out: ScoreMap = {};
+  const keys = Object.keys(raw as object);
+  if (keys.length !== uids.length || !uids.every((u) => keys.includes(u))) {
+    return `Enter the ${label.toLowerCase()} for every player.`;
+  }
+  for (const uid of uids) {
+    const n = (raw as Record<string, unknown>)[uid];
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < min || n > max) {
+      return `${label} must be whole numbers from ${min} to ${max}.`;
+    }
+    out[uid] = n;
+  }
+  return out;
+}
+
+/**
+ * Checks a reported result and returns clean details, or a plain error
+ * message. The winner must match the score:
+ * - EA FC: more goals; if goals are level, penalties decide (and must differ).
+ * - Clash Royale: more crowns (a level result can't be reported).
+ * - Warzone / Fortnite: best (lowest) placement; placements must all differ.
+ */
+export function checkResult(
+  game: GameConfig,
+  playerUids: string[],
+  winnerUid: string,
+  details: unknown,
+): { details: ResultDetails } | { error: string } {
+  if (!playerUids.includes(winnerUid)) return { error: 'Choose the winner.' };
+  const d = (details ?? {}) as Record<string, unknown>;
+  const { min, max, label } = LIMITS[game.resultKind];
+
+  if (game.resultKind === 'goals') {
+    const goals = readScores(d.goals, playerUids, min, max, label);
+    if (typeof goals === 'string') return { error: goals };
+    const [a, b] = playerUids;
+    if (goals[a] !== goals[b]) {
+      if (d.penalties !== undefined && d.penalties !== null) {
+        return { error: 'Only add penalties when the goals are level.' };
+      }
+      const leader = goals[a] > goals[b] ? a : b;
+      if (leader !== winnerUid) return { error: 'The winner must be the player with more goals.' };
+      return { details: { goals } };
+    }
+    const pens = readScores(d.penalties, playerUids, 0, 99, 'Penalties');
+    if (typeof pens === 'string') {
+      return { error: 'Goals are level: add the penalty shoot-out score.' };
+    }
+    if (pens[a] === pens[b]) return { error: 'A penalty shoot-out always has a winner.' };
+    const leader = pens[a] > pens[b] ? a : b;
+    if (leader !== winnerUid) {
+      return { error: 'The winner must be the player who won on penalties.' };
+    }
+    return { details: { goals, penalties: pens } };
+  }
+
+  if (game.resultKind === 'crowns') {
+    const crowns = readScores(d.crowns, playerUids, min, max, label);
+    if (typeof crowns === 'string') return { error: crowns };
+    const best = Math.max(...playerUids.map((u) => crowns[u]));
+    const leaders = playerUids.filter((u) => crowns[u] === best);
+    if (leaders.length > 1) return { error: 'Level on crowns: play again to get a winner.' };
+    if (leaders[0] !== winnerUid) {
+      return { error: 'The winner must be the player with more crowns.' };
+    }
+    return { details: { crowns } };
+  }
+
+  const placements = readScores(d.placements, playerUids, min, max, label);
+  if (typeof placements === 'string') return { error: placements };
+  const values = playerUids.map((u) => placements[u]);
+  if (new Set(values).size !== values.length) {
+    return { error: 'Each player must have a different placement.' };
+  }
+  const best = Math.min(...values);
+  if (placements[winnerUid] !== best) {
+    return { error: 'The winner must be the player with the best placement.' };
+  }
+  return { details: { placements } };
+}

@@ -74,11 +74,12 @@ Players must be **18+** and in **Spain**.
 - `functions/` – Cloud Functions (TypeScript, Functions v2, Node 22, region `europe-west1`).
   `onUserCreated` gives the 10 starter credits once (`ledger/grant_{uid}` + `wallets/{uid}`).
 - `firestore.rules`, `firestore.indexes.json` – security rules and indexes.
+- `storage.rules` – Firebase Storage rules for result screenshots.
 - `firebase.json`, `.firebaserc` – Firebase project config (`betterplayer-beta`).
 - `deploy.sh` – wakes Cloud Shell's Google credentials (`gcloud auth print-access-token`;
   a new session may show an in-shell "Authorize" box), installs the functions
   dependencies and runs `firebase deploy --only
-  functions,firestore:rules,firestore:indexes --project betterplayer-beta`. **No
+  functions,firestore:rules,firestore:indexes,storage --project betterplayer-beta`. **No
   `firebase login`**: Cloud Shell's own Google credentials are enough, and the login
   link can't complete on the owner's iPhone. Nothing is deployed automatically.
   The owner pastes this in Google Cloud Shell (keep it to one command; Cloud Shell
@@ -105,6 +106,17 @@ Players must be **18+** and in **Spain**.
 - `ledger/{entryId}`: `uid`, `type`, `amount`, `description`, `createdAt`. Players
   read only their own entries; nobody writes from the app. The starter grant's ID
   is `grant_{uid}`, which is what makes it impossible to grant twice.
+- Ledger types and their effect on the wallet (settlement entries also store
+  `availableDelta` / `lockedDelta`, so every wallet can be rebuilt from the ledger):
+  - `starter_grant` (`grant_{uid}`): available +10.
+  - `stake_lock` (`lock_{matchId}_{uid}`): available −2, locked +2.
+  - `winnings` (`settle_{matchId}_{uid}`): available + (pot − 20% fee), locked −2.
+  - `stake_lost` (`settle_…`): locked −2 (the entry went into the pot).
+  - `refund` (`settle_…`, admin cancel): available +2, locked −2.
+  - `stake_returned`: label only for now ("Entry returned"); nothing writes it yet.
+- App labels: "Starter credits", "Entry locked: [game] match", "Winnings",
+  "Entry lost", "Entry returned", "Refund". Never "stake" on screen.
+- `platform_ledger/{matchId}`: the 20% fee per completed match (server-only).
 - `wallets/{uid}`: `available`, `locked`, `updatedAt`. Owner can read; nobody writes
   from the app.
 - Every Cloud Function that moves credits must be idempotent (safe to run twice)
@@ -113,7 +125,8 @@ Players must be **18+** and in **Spain**.
 ## Matches
 
 - Lifecycle: `open` → `full` → `started` → `awaiting_result` → `under_review` →
-  `completed`, or `cancelled`. Round A (built) covers open, full, started, cancelled.
+  `completed`, or `cancelled`. Round A covers open → started; round B (results,
+  review, settlement) covers the rest.
 - All match changes go through callable Cloud Functions in `europe-west1`
   (`functions/src/matches/actions.ts`): `createMatch`, `joinMatch` (by id or share
   code), `leaveMatch`, `setLobbyCode`, `startMatch`, `cancelMatch`, plus the scheduled
@@ -130,6 +143,35 @@ Players must be **18+** and in **Spain**.
   **"Entry locked: [game] match"** (no cash words on screen).
 - Callable errors: the Firebase library appends " [400]"-style codes to messages;
   always show them through `matchError()` in `src/matches/api.ts`.
+
+## Results and review (round B)
+
+- Flow: `started` → a player reports (`submitResult`) → `awaiting_result` with
+  `responseDeadline` = +30 min → the other players `confirmResult` or
+  `disputeResult` → `under_review` (`disputed` true/false) → an admin decides
+  (`adminDecide`) → `completed` or `cancelled` (settled).
+- Only ONE report per match (the first player to report; no edits). The others
+  confirm or dispute. All others confirmed, or any dispute → `under_review`.
+  `closeResponseWindows` (every 5 min) moves `awaiting_result` past the deadline to
+  `under_review` with `disputed: false` (silence counts as confirmation).
+- Reports: `matches/{id}/reports/{uid}`; disputes: `matches/{id}/disputes/{uid}`.
+  Readable by players of that match and admins; written only by functions.
+- Score checks live in `checkResult` in `functions/src/shared/games.ts` (used by the
+  app form and the server): EA FC goals (+ penalties only when level, never level),
+  Clash Royale crowns 0–3 (no level results), Warzone/Fortnite distinct placements
+  (1 = best). The winner must match the score.
+- Screenshots: Storage `results/{matchId}/{uid}/{file}`. A player of a started or
+  awaiting match uploads into their own folder only; jpeg/png/webp/heic, ≤ 10 MB;
+  never overwritten or deleted (`resource == null` on create). Players of the match
+  and admins can read. Functions check the file exists and is in the caller's folder.
+- Admins: a document at `admins/{uid}`, created by hand in the Firebase console.
+  The Admin tab shows only for them. `adminDecide(decision, winnerUid?, note)`:
+  `approve` (reported winner), `override` (another player), `cancel_refund`.
+  Note required (3–500 chars). Writes `admin_reviews/{matchId}`.
+- Settlement is one idempotent transaction in `functions/src/matches/admin.ts`.
+- Reputation `reputation/{uid}` {points, matchesCompleted, disputesLost}, server-only,
+  owner-readable: +1 per completed match; −5 (and disputesLost +1) when your report
+  is overridden or your dispute is rejected. Cancel & refund changes nothing.
 
 ## Look and feel
 

@@ -13,11 +13,13 @@ import { games } from '@/constants/games';
 import { useMyMatches, useOpenMatches } from '@/matches/hooks';
 import { colors, fonts } from '@/constants/theme';
 import { formatCredits } from '@/wallet/format';
+import { useReputation } from '@/wallet/useReputation';
 import { useWallet } from '@/wallet/useWallet';
 
 export default function HomeScreen() {
   const { profile } = useAuth();
   const wallet = useWallet();
+  const reputation = useReputation();
   const credits = (n: number) => (wallet.loading ? '…' : formatCredits(n));
   const mine = useMyMatches(10);
   const open = useOpenMatches(5);
@@ -36,7 +38,10 @@ export default function HomeScreen() {
           color={colors.accent}
         />
         <StatCard label="Locked credits" value={credits(wallet.data.locked)} />
-        <StatCard label="Reputation" value="—" />
+        <StatCard
+          label="Reputation"
+          value={reputation.loading ? '…' : String(reputation.data.points)}
+        />
       </View>
 
       <View style={styles.row}>

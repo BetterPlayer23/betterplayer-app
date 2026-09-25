@@ -11,6 +11,9 @@ import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { FormMessage } from '@/components/FormMessage';
 import { MoneySummary } from '@/components/MoneySummary';
+import { ReportResultForm } from '@/components/ReportResultForm';
+import { ReportView } from '@/components/ReportView';
+import { RespondPanel } from '@/components/RespondPanel';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { StatusPill } from '@/components/StatusPill';
 import { StatusStepper } from '@/components/StatusStepper';
@@ -25,8 +28,9 @@ import {
   setLobbyCode,
   startMatch,
 } from '@/matches/api';
-import { useMatch } from '@/matches/hooks';
+import { useDisputes, useMatch, useReports } from '@/matches/hooks';
 import type { Match } from '@/matches/types';
+import { formatCredits } from '@/wallet/format';
 
 export default function MatchRoomScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -60,13 +64,19 @@ export default function MatchRoomScreen() {
 }
 
 function Room({ match }: { match: Match }) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const uid = user?.uid ?? '';
   const game = gameById(match.game);
   const color = game?.color ?? colors.accent;
   const isHost = match.hostUid === uid;
   const isPlayer = match.playerUids.includes(uid);
   const beforeStart = match.status === 'open' || match.status === 'full';
+  // Reports and disputes are readable by players of the match and admins only.
+  const canSeeResult = (isPlayer || isAdmin) && !!match.reportedByUid;
+  const reports = useReports(match.id, canSeeResult);
+  const disputes = useDisputes(match.id, canSeeResult && !!match.disputed);
+  const report = reports.data.find((r) => r.uid === match.reportedByUid) ?? reports.data[0];
+  const winnerTag = match.players.find((p) => p.uid === match.winnerUid)?.gamerTag;
 
   const [busy, setBusy] = useState<null | 'start' | 'cancel' | 'leave' | 'join'>(null);
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
@@ -103,7 +113,9 @@ function Room({ match }: { match: Match }) {
           text={
             match.cancelReason === 'expired'
               ? 'This match was cancelled: it didn’t fill up within 15 minutes. No credits were used.'
-              : 'The host cancelled this match. No credits were used.'
+              : match.cancelReason === 'admin_refund'
+                ? `A Betterplayer admin cancelled this match. Every player got their ${ENTRY_CREDITS} credits back.`
+                : 'The host cancelled this match. No credits were used.'
           }
         />
       ) : (
@@ -111,6 +123,51 @@ function Room({ match }: { match: Match }) {
           <StatusStepper status={match.status} />
         </Card>
       )}
+
+      {match.status === 'completed' && (
+        <Card style={[styles.card, styles.winnerCard]}>
+          <Text style={styles.label}>Winner</Text>
+          <Text style={styles.winner}>{winnerTag ?? '—'}</Text>
+          <Text style={styles.body}>
+            Checked by a Betterplayer admin. {winnerTag} got {formatCredits(match.winnerGets)}{' '}
+            credits.{match.winnerUid === uid ? ' Well played!' : ''}
+          </Text>
+        </Card>
+      )}
+
+      {match.status === 'started' && isPlayer && (
+        <>
+          <Text style={styles.small}>
+            The match has started and {ENTRY_CREDITS} credits are locked from each player. Play your
+            game, then report the result here.
+          </Text>
+          <ReportResultForm match={match} uid={uid} />
+        </>
+      )}
+
+      {match.status === 'under_review' && (
+        <FormMessage
+          kind="success"
+          text={
+            match.disputed
+              ? 'The result was disputed. A Betterplayer admin is checking it and will decide.'
+              : 'Result confirmed. A Betterplayer admin is checking it before any credits move.'
+          }
+        />
+      )}
+
+      {canSeeResult && report && (
+        <>
+          <SectionTitle>Result</SectionTitle>
+          <ReportView
+            report={report}
+            disputes={match.disputed ? disputes.data : []}
+            players={match.players}
+          />
+        </>
+      )}
+
+      {match.status === 'awaiting_result' && isPlayer && <RespondPanel match={match} uid={uid} />}
 
       <SectionTitle>
         Players {match.players.length}/{match.maxPlayers}
@@ -138,14 +195,14 @@ function Room({ match }: { match: Match }) {
           ))}
       </Card>
 
-      {match.status !== 'cancelled' && (
-        <>
-          <ShareCode
-            code={match.code}
-            expiresAt={match.status === 'open' ? match.expiresAt?.toMillis() : undefined}
-          />
-          <LobbyCode match={match} isHost={isHost} isPlayer={isPlayer} />
-        </>
+      {beforeStart && (
+        <ShareCode
+          code={match.code}
+          expiresAt={match.status === 'open' ? match.expiresAt?.toMillis() : undefined}
+        />
+      )}
+      {['open', 'full', 'started'].includes(match.status) && (
+        <LobbyCode match={match} isHost={isHost} isPlayer={isPlayer} />
       )}
 
       <SectionTitle>Credits</SectionTitle>
@@ -194,13 +251,6 @@ function Room({ match }: { match: Match }) {
           onPress={() => run('join', () => joinMatch({ matchId: match.id }))}
           loading={busy === 'join'}
         />
-      )}
-
-      {match.status === 'started' && isPlayer && (
-        <Text style={styles.small}>
-          The match has started and {ENTRY_CREDITS} credits are locked from each player. Play your
-          game now; reporting results comes in the next update.
-        </Text>
       )}
     </Screen>
   );
@@ -433,6 +483,14 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 10,
+  },
+  winnerCard: {
+    borderColor: colors.success,
+  },
+  winner: {
+    fontFamily: fonts.heading,
+    fontSize: 30,
+    color: colors.success,
   },
   small: {
     fontFamily: fonts.body,

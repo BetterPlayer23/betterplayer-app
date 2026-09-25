@@ -24,6 +24,8 @@ type AuthContextValue = {
   status: AuthStatus;
   user: User | null;
   profile: Profile | null;
+  // True when admins/{uid} exists (created by hand in the Firebase console).
+  isAdmin: boolean;
   signUp: (input: {
     email: string;
     password: string;
@@ -48,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileError, setProfileError] = useState(false);
   const [creating, setCreating] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Firebase keeps the session, so this fires with the saved user on launch.
   useEffect(() => onAuthStateChanged(auth, setUser), []);
@@ -68,6 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       () => setProfileError(true),
     );
   }, [user, attempt]);
+
+  // Is this player a Betterplayer admin? (Shows the Admin tab.)
+  useEffect(() => {
+    setIsAdmin(false);
+    if (!user) return;
+    return onSnapshot(
+      doc(db, 'admins', user.uid),
+      (snap) => setIsAdmin(snap.exists()),
+      () => setIsAdmin(false),
+    );
+  }, [user]);
 
   let status: AuthStatus;
   if (user === undefined) status = 'loading';
@@ -96,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     status,
     user: user ?? null,
     profile: profile ?? null,
+    isAdmin,
     async signUp({ email, password, gamerTag, platform }) {
       setCreating(true);
       try {

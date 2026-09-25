@@ -6,13 +6,7 @@ import { FormMessage } from '@/components/FormMessage';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { StatCard } from '@/components/StatCard';
 import { colors, fonts } from '@/constants/theme';
-import {
-  formatCredits,
-  formatDate,
-  formatSignedCredits,
-  isLock,
-  ledgerLabel,
-} from '@/wallet/format';
+import { formatCredits, formatDate, historyAmount, isLock, ledgerLabel } from '@/wallet/format';
 import { useLedger, useWallet, type LedgerEntry } from '@/wallet/useWallet';
 
 export default function WalletScreen() {
@@ -61,13 +55,14 @@ export default function WalletScreen() {
 
 function HistoryRow({ entry, first }: { entry: LedgerEntry; first: boolean }) {
   const lock = isLock(entry.type);
-  const positive = !lock && entry.amount > 0;
   const label = ledgerLabel(entry.type, entry.description);
-  // Skip the description when it would just repeat the label.
+  const amount = historyAmount(entry.type, entry.amount);
+  // Descriptions look like "Winnings: EA FC match"; show the part after the label.
+  const rest = entry.description.split(': ').slice(1).join(': ');
   const detail = lock
     ? 'Moved from available to locked until the result is confirmed'
     : entry.description && entry.description !== label
-      ? entry.description
+      ? rest || entry.description
       : null;
 
   return (
@@ -83,9 +78,16 @@ function HistoryRow({ entry, first }: { entry: LedgerEntry; first: boolean }) {
         style={[
           styles.amount,
           lock && styles.lockAmount,
-          { color: positive ? colors.success : lock ? colors.textMuted : colors.text },
+          {
+            color:
+              amount.tone === 'gain'
+                ? colors.success
+                : amount.tone === 'loss'
+                  ? colors.text
+                  : colors.textMuted,
+          },
         ]}>
-        {lock ? `${formatCredits(entry.amount)} locked` : formatSignedCredits(entry.amount)}
+        {amount.text}
       </Text>
     </View>
   );
