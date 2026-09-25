@@ -84,7 +84,8 @@ Players must be **18+** and in **Spain**.
   Storage service agent `roles/firebaserules.firestoreServiceAgent` (the CLI skips
   that question when unattended). Uses the repository secret `GCP_SA_KEY` = JSON key
   of the service account `github-deploy` (roles: Editor, Firebase Admin, Cloud Run
-  Admin, Project IAM Admin, Service Account User). Never runs on pull requests.
+  Admin, Project IAM Admin, Service Account User; the workflow adds Secret Manager
+  Admin itself). Never runs on pull requests.
 - `deploy.sh` – backup way to deploy (same `firebase deploy` as the workflow). If
   `~/.deployer-key.json` exists (the `github-deploy` key, kept outside the repo) it
   sets `GOOGLE_APPLICATION_CREDENTIALS` to it; otherwise it uses the machine's own
@@ -193,6 +194,23 @@ Players must be **18+** and in **Spain**.
 - Reputation `reputation/{uid}` {points, matchesCompleted, disputesLost}, server-only,
   owner-readable: +1 per completed match; −5 (and disputesLost +1) when your report
   is overridden or your dispute is rejected. Cancel & refund changes nothing.
+
+## Admin email alerts
+
+- `alertAdminOnReview` (`functions/src/matches/alerts.ts`, trigger on `matches/{id}`
+  updates): when a match becomes `under_review`, emails `frantzbenois+admin@gmail.com`
+  from `Better.player.one@gmail.com` via Gmail SMTP (nodemailer). Subject
+  "Review needed: [game] match"; body: game, players, reported winner + score,
+  disputed yes/no (+ reason), app link. Once per match (`adminAlerts/{matchId}`,
+  server-only). `retry: false`.
+- The Gmail **app password** is the Firebase secret `GMAIL_APP_PASSWORD` (Secret
+  Manager), never in code. The deploy workflow grants the `github-deploy` account
+  Secret Manager Admin and creates a `not-set` placeholder if the secret is missing;
+  with the placeholder the function logs a warning and sends nothing. After setting
+  the real value, **redeploy** (Actions → Firebase deploy → Run workflow): functions
+  use the secret version that was current at deploy time.
+- Emulator tests: put `GMAIL_APP_PASSWORD=...` in `functions/.secret.local`
+  (git-ignored); in the emulator mail is only built (jsonTransport), never sent.
 
 ## Look and feel
 

@@ -1,13 +1,16 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
-import { onDocumentCreated } from 'firebase-functions/firestore';
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/firestore';
 import { onCall, type CallableRequest } from 'firebase-functions/https';
 import { setGlobalOptions } from 'firebase-functions/options';
+import { defineSecret } from 'firebase-functions/params';
 import { onSchedule } from 'firebase-functions/scheduler';
 
 import * as matches from './matches/actions';
 import * as admin from './matches/admin';
+import { sendReviewAlert } from './matches/alerts';
+import type { MatchDoc } from './matches/common';
 import * as results from './matches/results';
 import { requireUid } from './matches/common';
 import { acceptRules as acceptRulesAction } from './rules';
@@ -77,3 +80,24 @@ export const expireOpenMatches = onSchedule(
 
 // Beta rules acceptance (saved on users/{uid} with a server timestamp).
 export const acceptRules = callable(acceptRulesAction);
+
+// ---- Admin email alerts
+// The Gmail app password lives in Secret Manager (Firebase secret), never in code.
+const gmailAppPassword = defineSecret('GMAIL_APP_PASSWORD');
+
+// When a match becomes under_review, email the admin (once per match).
+export const alertAdminOnReview = onDocumentUpdated(
+  { document: 'matches/{matchId}', secrets: [gmailAppPassword], retry: false },
+  async (event) => {
+    const before = event.data?.before.data() as MatchDoc | undefined;
+    const after = event.data?.after.data() as MatchDoc | undefined;
+    if (!after || after.status !== 'under_review' || before?.status === 'under_review') return;
+    const result = await sendReviewAlert(
+      getFirestore(),
+      event.params.matchId,
+      after,
+      gmailAppPassword.value(),
+    );
+    logger.info('Review alert', { matchId: event.params.matchId, result });
+  },
+);

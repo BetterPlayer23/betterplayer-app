@@ -52,3 +52,7 @@ ui-debug.log
 *deployer-key*.json
 betterplayer-beta-*.json
 gha-creds-*.json
+
+# Firebase emulator secret values (never commit)
+.secret.local
+functions/.secret.local
