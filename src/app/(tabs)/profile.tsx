@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -15,7 +16,7 @@ import { colors, fonts } from '@/constants/theme';
 type Message = { kind: 'error' | 'success'; text: string } | null;
 
 export default function ProfileScreen() {
-  const { profile, user, updateGamerTag, updateGameIds, logOut } = useAuth();
+  const { profile, user, isAdmin, updateGamerTag, updateGameIds, logOut } = useAuth();
 
   // Gamer tag editing
   const [editingTag, setEditingTag] = useState(false);
@@ -144,6 +145,13 @@ export default function ProfileScreen() {
         <Button label="Save game IDs" onPress={saveIds} loading={savingIds} />
       </Card>
 
+      {isAdmin && (
+        <Button
+          label="Admin: review matches"
+          onPress={() => router.navigate('/admin')}
+          style={styles.logout}
+        />
+      )}
       <Button label="Log out" variant="outline" onPress={logOut} style={styles.logout} />
     </Screen>
   );

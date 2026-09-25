@@ -1,0 +1,34 @@
+name: Check admin access
+
+# Read-only diagnostic, run by hand: explains why a player doesn't see the
+# Admin tab. Changes nothing. Prints only yes/no answers.
+on:
+  workflow_dispatch:
+    inputs:
+      uid:
+        description: 'User ID (uid) to check'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm --prefix functions ci
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Check
+        env:
+          CHECK_UID: ${{ inputs.uid }}
+        run: |
+          export FIREBASE_WEB_API_KEY=$(grep -o "apiKey: '[^']*'" src/firebase/config.ts | cut -d"'" -f2)
+          node .github/scripts/check-admin.mjs
