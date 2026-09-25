@@ -46,3 +46,8 @@ functions/lib/
 firebase-debug*.log
 firestore-debug.log
 ui-debug.log
+
+# Service account keys: never commit them
+.deployer-key.json
+*deployer-key*.json
+betterplayer-beta-*.json

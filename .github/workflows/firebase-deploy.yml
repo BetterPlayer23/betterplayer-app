@@ -1,11 +1,11 @@
 name: Firebase deploy
 
-# Deploys the Cloud Functions, Firestore rules and indexes, and Storage rules
-# to betterplayer-beta, so nobody needs Cloud Shell.
-# Runs on every push to main that changes any of them, or by hand from the
-# Actions tab ("Run workflow").
-# Needs the repository secret GCP_SA_KEY: the JSON key of the "github-deploy"
-# service account (see CLAUDE.md). Without it the job is skipped.
+# Deploys the backend (Cloud Functions, Firestore rules and indexes, Storage
+# rules) to the Firebase project betterplayer-beta.
+# Runs on pushes to main that change the backend, or by hand from the Actions
+# tab ("Run workflow"). Never on pull requests.
+# Uses the repository secret GCP_SA_KEY: the JSON key of the "github-deploy"
+# service account. The key is never printed or written into the repo.
 on:
   push:
     branches: [main]
@@ -34,64 +34,43 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Check the deploy key is set up
-        id: key
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: |
-          if [ -z "$GCP_SA_KEY" ]; then
-            echo "::warning::Skipping: add the GCP_SA_KEY secret to deploy Firebase from GitHub."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
-        if: steps.key.outputs.ready == 'true'
 
+      # Node 22: the functions run on Node 22 and firebase-admin needs >= 22.
       - uses: actions/setup-node@v4
-        if: steps.key.outputs.ready == 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: functions/package-lock.json
 
       - name: Install Cloud Functions dependencies
-        if: steps.key.outputs.ready == 'true'
         run: npm --prefix functions ci
 
-      - name: Sign in to Google Cloud with the deploy key
-        if: steps.key.outputs.ready == 'true'
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: |
-          KEY_FILE="$RUNNER_TEMP/gcp-key.json"
-          printf '%s' "$GCP_SA_KEY" > "$KEY_FILE"
-          chmod 600 "$KEY_FILE"
-          # The Firebase CLI and gcloud both use this key.
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$KEY_FILE" >> "$GITHUB_ENV"
-          gcloud auth activate-service-account --key-file="$KEY_FILE" --quiet
-          gcloud config set project "$PROJECT" --quiet
+      # Signs in with the key from the secret. The action keeps the key in a
+      # temporary file outside the repo and sets GOOGLE_APPLICATION_CREDENTIALS,
+      # which the Firebase CLI and gcloud use.
+      - name: Sign in to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       # Storage rules read Firestore (who is a player / admin). The Firebase CLI
       # only offers to grant this when run by a person, so grant it here.
-      # Safe to repeat. Not fatal: a warning explains what to do if it fails.
+      # Safe to repeat; a warning (not a failure) if it can't.
       - name: Let Storage rules read Firestore
-        if: steps.key.outputs.ready == 'true'
         run: |
           NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
           if ! gcloud projects add-iam-policy-binding "$PROJECT" \
               --member="serviceAccount:service-${NUMBER}@gcp-sa-firebasestorage.iam.gserviceaccount.com" \
               --role="roles/firebaserules.firestoreServiceAgent" \
               --condition=None --quiet > /dev/null; then
-            echo "::warning::Couldn't grant Storage access to Firestore. Screenshot uploads may be refused until this works."
+            echo "::warning::Couldn't grant Storage access to Firestore. Screenshot uploads may be refused."
           fi
 
       # --non-interactive: nobody is there to answer questions.
       # --force: set up the cleanup policy for old function builds, and remove
       #          functions that are no longer in the code, without asking.
       - name: Deploy functions, rules and indexes
-        if: steps.key.outputs.ready == 'true'
         run: >
           npx --yes firebase-tools@15 deploy
           --only functions,firestore:rules,firestore:indexes,storage

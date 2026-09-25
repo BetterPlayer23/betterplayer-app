@@ -79,20 +79,16 @@ Players must be **18+** and in **Spain**.
 - `.github/workflows/firebase-deploy.yml` – **the normal way to deploy Firebase**: on
   every push to `main` that touches `functions/`, rules, indexes or Firebase config
   (or "Run workflow" in the Actions tab), deploys functions, Firestore rules and
-  indexes and Storage rules with `--non-interactive --force`. It also grants the
+  indexes and Storage rules with `--non-interactive --force` (Node 22; signs in with
+  `google-github-actions/auth` using the `GCP_SA_KEY` secret). It also grants the
   Storage service agent `roles/firebaserules.firestoreServiceAgent` (the CLI skips
   that question when unattended). Uses the repository secret `GCP_SA_KEY` = JSON key
   of the service account `github-deploy` (roles: Editor, Firebase Admin, Cloud Run
-  Admin, Project IAM Admin, Service Account User). No secret → the job is skipped.
-- `deploy.sh` – fallback from Cloud Shell. Wakes Cloud Shell's Google credentials (`gcloud auth print-access-token`;
-  a new session may show an in-shell "Authorize" box), installs the functions
-  dependencies and runs `firebase deploy --only
-  functions,firestore:rules,firestore:indexes,storage --project betterplayer-beta`. **No
-  `firebase login`**: Cloud Shell's own Google credentials are enough, and the login
-  link can't complete on the owner's iPhone. Nothing is deployed automatically.
-  The owner pastes this in Google Cloud Shell (keep it to one command; Cloud Shell
-  disconnects when switching apps):
-  `cd ~ && ( [ -d betterplayer-app ] || git clone https://github.com/BetterPlayer23/betterplayer-app.git ) && cd betterplayer-app && git pull -q && ./deploy.sh`
+  Admin, Project IAM Admin, Service Account User). Never runs on pull requests.
+- `deploy.sh` – backup way to deploy (same `firebase deploy` as the workflow). If
+  `~/.deployer-key.json` exists (the `github-deploy` key, kept outside the repo) it
+  sets `GOOGLE_APPLICATION_CREDENTIALS` to it; otherwise it uses the machine's own
+  Google credentials. No gcloud sign-in checks. Key files are in `.gitignore`.
 - `top-up.sh` – starter credits for players who signed up before the Cloud Function
   existed. Not run by `deploy.sh`. `./top-up.sh` previews, `./top-up.sh --apply` grants. Safe to re-run
   (uses the same idempotent `grantStarterCredits`).
