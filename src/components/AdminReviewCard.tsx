@@ -12,7 +12,7 @@ import { ReportView } from '@/components/ReportView';
 import { TextField } from '@/components/TextField';
 import { VerificationBadge } from '@/components/VerificationBadge';
 import { gameById } from '@/constants/games';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, glow, withAlpha } from '@/constants/theme';
 import { adminDecide, matchError, type Decision } from '@/matches/api';
 import { useDisputes, useReports } from '@/matches/hooks';
 import { describeOutcome, winnersOf } from '@/matches/format';
@@ -59,7 +59,7 @@ export function AdminReviewCard({ match }: { match: Match }) {
   }
 
   return (
-    <Card style={[styles.card, { borderLeftColor: game?.color ?? colors.accent }]}>
+    <Card style={[styles.card, { borderColor: withAlpha(game?.color ?? colors.primary, 0.35) }]}>
       <View style={styles.top}>
         <Text style={[styles.game, { color: game?.color ?? colors.accent }]}>{match.gameName}</Text>
         <Text style={[styles.badge, match.disputed ? styles.disputed : styles.confirmed]}>
@@ -147,7 +147,6 @@ export function AdminReviewCard({ match }: { match: Match }) {
 const styles = StyleSheet.create({
   card: {
     gap: 12,
-    borderLeftWidth: 4,
   },
   top: {
     flexDirection: 'row',
@@ -172,10 +171,12 @@ const styles = StyleSheet.create({
   disputed: {
     color: colors.error,
     borderColor: colors.error,
+    boxShadow: glow.badge(colors.error),
   },
   confirmed: {
     color: colors.success,
     borderColor: colors.success,
+    boxShadow: glow.badge(colors.success),
   },
   meta: {
     fontFamily: fonts.body,

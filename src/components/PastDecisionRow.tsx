@@ -7,7 +7,7 @@ import { Button } from '@/components/Button';
 import { ChipSelect } from '@/components/ChipSelect';
 import { FormMessage } from '@/components/FormMessage';
 import { TextField } from '@/components/TextField';
-import { colors, fonts } from '@/constants/theme';
+import { MIN_TOUCH, colors, fonts } from '@/constants/theme';
 import { matchError, reverseAutoDecision } from '@/matches/api';
 import type { AdminReview } from '@/matches/hooks';
 
@@ -91,7 +91,7 @@ export function PastDecisionRow({
       </Text>
 
       {canReverse && !open && (
-        <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
+        <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => setOpen(true)}>
           <Text style={styles.link}>Reverse this decision</Text>
         </Pressable>
       )}
@@ -163,6 +163,10 @@ const styles = StyleSheet.create({
   note: {
     fontSize: 13,
     color: colors.textMuted,
+  },
+  linkButton: {
+    minHeight: MIN_TOUCH,
+    justifyContent: 'center',
   },
   link: {
     fontFamily: fonts.bodySemiBold,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
-import { colors, fonts } from '@/constants/theme';
+import { MIN_TOUCH, colors, fonts } from '@/constants/theme';
 
 type Props = Omit<TextInputProps, 'style' | 'secureTextEntry'> & {
   label: string;
@@ -72,9 +72,9 @@ const styles = StyleSheet.create({
   box: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.field,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.fieldBorder,
     borderRadius: 12,
   },
   input: {
@@ -89,6 +89,8 @@ const styles = StyleSheet.create({
   toggle: {
     paddingHorizontal: 14,
     paddingVertical: 12,
+    minHeight: MIN_TOUCH,
+    justifyContent: 'center',
   },
   toggleText: {
     fontFamily: fonts.bodySemiBold,

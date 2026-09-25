@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { percent } from '@shared/games';
 
 import type { Game } from '@/constants/games';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, glow, radius, withAlpha } from '@/constants/theme';
 import { useFeeRate } from '@/matches/useFeeRate';
 
 // A game shown as its name on a coloured tile. No publisher logos or artwork.
@@ -31,8 +31,13 @@ export function GameTile({
   );
   const tileStyle = [
     styles.tile,
-    { borderColor: game.color, backgroundColor: `${game.color}1F` },
-    selected && { borderWidth: 2, backgroundColor: `${game.color}40` },
+    { borderColor: withAlpha(game.color, 0.55), backgroundColor: colors.surface },
+    selected && {
+      borderWidth: 2,
+      borderColor: game.color,
+      backgroundColor: withAlpha(game.color, 0.08),
+      boxShadow: glow.magentaButton(game.color),
+    },
   ];
 
   if (!onPress) return <View style={tileStyle}>{content}</View>;
@@ -60,7 +65,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minHeight: 84,
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: radius.cardSmall,
     padding: 12,
     justifyContent: 'space-between',
   },
@@ -71,6 +76,6 @@ const styles = StyleSheet.create({
   players: {
     fontFamily: fonts.bodyMedium,
     fontSize: 12,
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
 });

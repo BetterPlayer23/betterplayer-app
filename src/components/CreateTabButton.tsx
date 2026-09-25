@@ -2,7 +2,7 @@ import type { BottomTabBarButtonProps } from 'expo-router/tabs';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { colors, primaryGlow } from '@/constants/theme';
+import { colors, glow } from '@/constants/theme';
 
 // The raised round "+" button in the middle of the tab bar.
 export function CreateTabButton({ onPress, accessibilityState }: BottomTabBarButtonProps) {
@@ -16,7 +16,7 @@ export function CreateTabButton({ onPress, accessibilityState }: BottomTabBarBut
         style={({ pressed }) => [styles.circle, { opacity: pressed ? 0.85 : 1 }]}>
         <SymbolView
           name={{ ios: 'plus', android: 'add', web: 'add' }}
-          tintColor={colors.text}
+          tintColor={colors.onPrimary}
           size={30}
         />
       </Pressable>
@@ -39,6 +39,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderWidth: 4,
     borderColor: colors.background,
-    boxShadow: primaryGlow,
+    // A 4px ring in the background colour makes it float above the bar.
+    boxShadow: glow.primaryButton(),
   },
 });

@@ -2,7 +2,7 @@ import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, fonts } from '@/constants/theme';
+import { MIN_TOUCH, colors, fonts, glow, radius } from '@/constants/theme';
 
 // Pass onBack to show a back arrow before the logo.
 export function AppHeader({ onBack }: { onBack?: () => void }) {
@@ -25,7 +25,9 @@ export function AppHeader({ onBack }: { onBack?: () => void }) {
             />
           </Pressable>
         )}
-        <Text style={styles.logo}>Betterplayer</Text>
+        <Text style={styles.logo} accessibilityLabel="Betterplayer">
+          Better<Text style={styles.logoAccent}>player</Text>
+        </Text>
       </View>
       <View style={styles.right}>
         <View style={styles.badge}>
@@ -44,7 +46,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.chrome,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -55,12 +57,19 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   back: {
-    padding: 2,
+    minWidth: MIN_TOUCH,
+    minHeight: MIN_TOUCH,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -10,
   },
   logo: {
-    fontFamily: fonts.headingHeavy,
-    fontSize: 26,
-    color: colors.text,
+    fontFamily: fonts.heading,
+    fontSize: 24,
+    color: '#FFFFFF',
+  },
+  logoAccent: {
+    color: colors.primary,
   },
   right: {
     alignItems: 'flex-end',
@@ -68,16 +77,17 @@ const styles = StyleSheet.create({
   },
   badge: {
     borderWidth: 1,
-    borderColor: colors.accent,
-    borderRadius: 999,
+    borderColor: colors.primary,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 3,
+    boxShadow: glow.badge(colors.primary),
   },
   badgeText: {
     fontFamily: fonts.bodyBold,
     fontSize: 11,
     letterSpacing: 1,
-    color: colors.accent,
+    color: colors.primary,
   },
   marker: {
     fontFamily: fonts.bodyMedium,

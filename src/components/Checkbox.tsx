@@ -1,7 +1,7 @@
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, fonts } from '@/constants/theme';
+import { MIN_TOUCH, colors, fonts } from '@/constants/theme';
 
 type Props = {
   label: string;
@@ -27,7 +27,7 @@ export function Checkbox({ label, checked, onChange, error }: Props) {
           {checked && (
             <SymbolView
               name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-              tintColor={colors.text}
+              tintColor={colors.onPrimary}
               size={16}
             />
           )}
@@ -45,8 +45,9 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
+    minHeight: MIN_TOUCH,
   },
   box: {
     width: 24,

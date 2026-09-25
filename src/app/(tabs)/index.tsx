@@ -11,7 +11,7 @@ import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/auth/AuthProvider';
 import { games } from '@/constants/games';
 import { useMyMatches, useOpenMatches } from '@/matches/hooks';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, textGlow } from '@/constants/theme';
 import { formatCredits } from '@/wallet/format';
 import { useReputation } from '@/wallet/useReputation';
 import { useWallet } from '@/wallet/useWallet';
@@ -27,7 +27,9 @@ export default function HomeScreen() {
   return (
     <Screen>
       <View style={styles.greeting}>
-        <Text style={styles.hello}>Hi, {profile?.gamerTag ?? 'Player'}</Text>
+        <Text style={styles.hello}>
+          Hi, <Text style={styles.tag}>{profile?.gamerTag ?? 'Player'}</Text>
+        </Text>
         <Text style={styles.sub}>Ready for your next match?</Text>
       </View>
 
@@ -35,12 +37,18 @@ export default function HomeScreen() {
         <StatCard
           label="Available credits"
           value={credits(wallet.data.available)}
-          color={colors.accent}
+          color={colors.primary}
+          glow
         />
-        <StatCard label="Locked credits" value={credits(wallet.data.locked)} />
+        <StatCard
+          label="Locked credits"
+          value={credits(wallet.data.locked)}
+          color={colors.awaiting}
+        />
         <StatCard
           label="Reputation"
           value={reputation.loading ? '…' : String(reputation.data.points)}
+          color={colors.reputation}
         />
       </View>
 
@@ -52,7 +60,7 @@ export default function HomeScreen() {
         />
         <Button
           label="Join match"
-          variant="success"
+          variant="secondary"
           style={styles.flex}
           onPress={() => router.navigate('/matches')}
         />
@@ -60,7 +68,7 @@ export default function HomeScreen() {
 
       <SectionTitle>Active match</SectionTitle>
       {mine.active ? (
-        <MatchCard match={mine.active} />
+        <MatchCard match={mine.active} variant="active" />
       ) : (
         <EmptyState
           title="No active match"
@@ -92,8 +100,12 @@ const styles = StyleSheet.create({
   },
   hello: {
     fontFamily: fonts.heading,
-    fontSize: 32,
-    color: colors.text,
+    fontSize: 34,
+    color: '#FFFFFF',
+  },
+  tag: {
+    color: colors.primary,
+    ...textGlow(colors.primary),
   },
   sub: {
     fontFamily: fonts.body,

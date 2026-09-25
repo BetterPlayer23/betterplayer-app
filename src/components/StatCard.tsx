@@ -1,18 +1,23 @@
 import { StyleSheet, Text } from 'react-native';
 
 import { Card } from '@/components/Card';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, textGlow } from '@/constants/theme';
 
 type Props = {
   label: string;
   value: string;
   color?: string;
+  glow?: boolean; // soft glow on the number (highlighted numbers only)
+  big?: boolean; // a larger number (Wallet balance)
 };
 
-export function StatCard({ label, value, color = colors.text }: Props) {
+// A big Exo 2 number with a 2px top border in the same colour.
+export function StatCard({ label, value, color = colors.text, glow = false, big = false }: Props) {
   return (
-    <Card style={styles.card}>
-      <Text style={[styles.value, { color }]}>{value}</Text>
+    <Card style={[styles.card, { borderTopColor: color }]}>
+      <Text style={[styles.value, big && styles.big, { color }, glow && textGlow(color)]}>
+        {value}
+      </Text>
       <Text style={styles.label}>{label}</Text>
     </Card>
   );
@@ -24,14 +29,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 10,
     gap: 4,
+    borderTopWidth: 2,
   },
   value: {
     fontFamily: fonts.heading,
-    fontSize: 26,
+    fontSize: 28,
+  },
+  big: {
+    fontSize: 36,
   },
   label: {
     fontFamily: fonts.bodyMedium,
     fontSize: 12,
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
 });

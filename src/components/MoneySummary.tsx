@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { matchMoney, percent, type ResultKind } from '@shared/games';
 
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, textGlow } from '@/constants/theme';
 import { formatCredits } from '@/wallet/format';
 
 // Entry, pot, fee and what the winner gets, for a number of players and a fee
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: fonts.body,
     fontSize: 14,
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
   value: {
     fontFamily: fonts.bodyMedium,
@@ -81,5 +81,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.heading,
     fontSize: 22,
     color: colors.success,
+    ...textGlow(colors.success),
   },
 });

@@ -8,7 +8,7 @@ import { Card } from '@/components/Card';
 import { FormMessage } from '@/components/FormMessage';
 import { CameraField } from '@/components/CameraField';
 import { TextField } from '@/components/TextField';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, textGlow } from '@/constants/theme';
 import { confirmResult, disputeResult, matchError } from '@/matches/api';
 import type { Match } from '@/matches/types';
 import { uploadResultImage, type PickedImage } from '@/matches/upload';
@@ -113,11 +113,11 @@ export function RespondPanel({ match, uid }: { match: Match; uid: string }) {
           </Text>
           <Button
             label="Confirm result"
-            variant="success"
+            variant="primary"
             onPress={confirm}
             loading={busy === 'confirm'}
           />
-          <Button label="Dispute" variant="outline" onPress={() => setMode('dispute')} />
+          <Button label="Dispute" variant="danger" onPress={() => setMode('dispute')} />
         </>
       )}
       {error && <FormMessage kind="error" text={error} />}
@@ -142,8 +142,9 @@ const styles = StyleSheet.create({
   },
   timer: {
     fontFamily: fonts.heading,
-    fontSize: 26,
+    fontSize: 28,
     color: colors.awaiting,
+    ...textGlow(colors.awaiting),
   },
   body: {
     fontFamily: fonts.body,

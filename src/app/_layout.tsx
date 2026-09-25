@@ -1,10 +1,10 @@
-import { Exo2_700Bold_Italic, Exo2_800ExtraBold_Italic } from '@expo-google-fonts/exo-2';
 import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
+  ChakraPetch_400Regular,
+  ChakraPetch_500Medium,
+  ChakraPetch_600SemiBold,
+  ChakraPetch_700Bold,
+} from '@expo-google-fonts/chakra-petch';
+import { Exo2_800ExtraBold_Italic } from '@expo-google-fonts/exo-2';
 import { useFonts } from 'expo-font';
 import { DarkTheme, Stack, ThemeProvider, router, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -32,7 +32,7 @@ const theme: Theme = {
     ...DarkTheme.colors,
     primary: colors.primary,
     background: colors.background,
-    card: colors.surface,
+    card: colors.chrome,
     text: colors.text,
     border: colors.border,
     notification: colors.error,
@@ -41,12 +41,11 @@ const theme: Theme = {
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    Exo2_700Bold_Italic,
     Exo2_800ExtraBold_Italic,
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
+    ChakraPetch_400Regular,
+    ChakraPetch_500Medium,
+    ChakraPetch_600SemiBold,
+    ChakraPetch_700Bold,
   });
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.

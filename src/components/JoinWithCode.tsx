@@ -43,7 +43,7 @@ export function JoinWithCode() {
         </View>
         <Button
           label="Join"
-          variant="success"
+          variant="secondary"
           onPress={join}
           loading={busy}
           disabled={code.trim().length === 0}

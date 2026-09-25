@@ -2,10 +2,9 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { MatchStatus } from '@shared/games';
 
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, glow } from '@/constants/theme';
 import { statusLabels } from '@/matches/types';
 
-import { statusColors } from './StatusPill';
 
 const STEPS: MatchStatus[] = [
   'open',
@@ -17,7 +16,8 @@ const STEPS: MatchStatus[] = [
 ];
 
 // Open → Full → Started → Awaiting result → Under review → Completed.
-export function StatusStepper({ status }: { status: MatchStatus }) {
+// Dots and line in the game's colour (`color`); the current step glows.
+export function StatusStepper({ status, color: gameColor = colors.primary }: { status: MatchStatus; color?: string }) {
   const current = STEPS.indexOf(status);
 
   return (
@@ -25,19 +25,21 @@ export function StatusStepper({ status }: { status: MatchStatus }) {
       {STEPS.map((step, i) => {
         const done = current >= 0 && i < current;
         const active = i === current;
-        const color = active ? statusColors[step] : done ? colors.text : colors.textMuted;
+        const color = active ? gameColor : done ? colors.text : colors.textMuted;
+        const dotColor = active || done ? gameColor : colors.border;
         return (
           <View key={step} style={styles.row}>
             <View style={styles.rail}>
               <View
                 style={[
                   styles.dot,
-                  { borderColor: active || done ? color : colors.border },
-                  (active || done) && { backgroundColor: color },
+                  { borderColor: dotColor },
+                  (active || done) && { backgroundColor: dotColor },
+                  active && { boxShadow: glow.badge(gameColor) },
                 ]}
               />
               {i < STEPS.length - 1 && (
-                <View style={[styles.line, done && { backgroundColor: colors.text }]} />
+                <View style={[styles.line, done && { backgroundColor: gameColor }]} />
               )}
             </View>
             <Text style={[styles.label, { color }, active && { fontFamily: fonts.bodyBold }]}>

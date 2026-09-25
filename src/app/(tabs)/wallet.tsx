@@ -24,11 +24,14 @@ export default function WalletScreen() {
         <StatCard
           label="Available credits"
           value={wallet.loading ? '…' : formatCredits(wallet.data.available)}
-          color={colors.accent}
+          color={colors.primary}
+          glow
+          big
         />
         <StatCard
           label="Locked credits"
           value={wallet.loading ? '…' : formatCredits(wallet.data.locked)}
+          color={colors.awaiting}
         />
       </View>
       <Text style={styles.note}>
@@ -49,17 +52,18 @@ export default function WalletScreen() {
           message="Your 10 starter credits will appear here a few seconds after you join."
         />
       ) : (
-        <Card style={styles.list}>
-          {ledger.data.map((entry, i) => (
-            <HistoryRow key={entry.id} entry={entry} first={i === 0} />
+        <View style={styles.list}>
+          {ledger.data.map((entry) => (
+            <HistoryRow key={entry.id} entry={entry} />
           ))}
-        </Card>
+        </View>
       )}
     </Screen>
   );
 }
 
-function HistoryRow({ entry, first }: { entry: LedgerEntry; first: boolean }) {
+// Each ledger line is its own card: wins in green, entries and fees muted.
+function HistoryRow({ entry }: { entry: LedgerEntry }) {
   const lock = isLock(entry.type);
   const label = ledgerLabel(entry.type, entry.description);
   const amount = historyAmount(entry.type, entry.amount);
@@ -72,7 +76,7 @@ function HistoryRow({ entry, first }: { entry: LedgerEntry; first: boolean }) {
       : null;
 
   return (
-    <View style={[styles.item, !first && styles.itemBorder]}>
+    <Card style={styles.item}>
       <View style={styles.itemText}>
         <Text style={styles.itemLabel}>{label}</Text>
         {detail && <Text style={styles.itemDetail}>{detail}</Text>}
@@ -86,16 +90,12 @@ function HistoryRow({ entry, first }: { entry: LedgerEntry; first: boolean }) {
           lock && styles.lockAmount,
           {
             color:
-              amount.tone === 'gain'
-                ? colors.success
-                : amount.tone === 'loss'
-                  ? colors.text
-                  : colors.textMuted,
+              amount.tone === 'gain' ? colors.success : colors.textMuted,
           },
         ]}>
         {amount.text}
       </Text>
-    </View>
+    </Card>
   );
 }
 
@@ -114,17 +114,13 @@ const styles = StyleSheet.create({
     marginVertical: 24,
   },
   list: {
-    paddingVertical: 4,
+    gap: 8,
   },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
-  },
-  itemBorder: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   itemText: {
     flex: 1,

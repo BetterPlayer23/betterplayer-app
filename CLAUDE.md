@@ -353,20 +353,35 @@ Players must be **18+** and in **Spain**.
 - Emulator tests: put `GMAIL_APP_PASSWORD=...` and `ANTHROPIC_API_KEY=...` in `functions/.secret.local`
   (git-ignored); in the emulator mail is only built (jsonTransport), never sent.
 
-## Look and feel
+## Look and feel ("esports neon")
 
-Dark theme only.
+Dark theme only. All tokens live in `src/constants/theme.ts` (colours, `glow`,
+`textGlow`, `radius`, `MIN_TOUCH`, fonts); never hard-code colours in screens.
 
-- Background dark navy `#070B16`; cards `#0E1628` with thin blue borders `#1C2A4A`.
-- Electric blue `#1E6BFF` for primary actions, with a soft glow.
-- Cyan `#29B6FF` accent.
-- Green `#22C55E` for Join and success.
-- Yellow `#FACC15` for "awaiting result".
-- Red `#EF4444` for errors and full matches.
-- Text `#F5F7FF`, muted text `#8A97B5`.
-- Fonts: Exo 2 bold italic for the logo and headings, Inter for body text.
-- Every screen has the header: "Betterplayer" logo, outlined "CLOSED BETA" badge,
-  and "18+ · Spain only".
+- Background `#07080F`; header and bottom bar `#0A0C16`; cards `#0E1120` with a 1px
+  border `rgba(255,255,255,0.06)`, radius 14–16; buttons radius 12–14.
+- Cyan `#22D3EE` primary (text on it `#04121A`); magenta `#E040FB` secondary (text
+  `#F0A6FF`); amber `#FFB020` locked/waiting; green `#39FF88` active/success/wins;
+  danger `#FF4D6D`; text `#E6E9F2`, secondary `#A3ABBE`, muted `#8B93A7`.
+  Game colours (`src/constants/games.ts`): EA FC green, Clash Royale `#38BDF8`,
+  Warzone orange, Fortnite purple. All text colours pass WCAG AA on the backgrounds.
+- Glow = soft outer shadow in the element's colour (`glow.*`): primary buttons
+  0 0 18px 55%, magenta 0 0 16px 45%, active match card 0 0 18px 18%, badges
+  0 0 10px 25%; highlighted numbers `textGlow` (0 0 12px 60%). Never on body text.
+  Don't combine `textGlow` with `numberOfLines` (the glow gets clipped into a box).
+- Fonts: Exo 2 ExtraBold Italic (800) for titles, big numbers and game names;
+  Chakra Petch 400–700 for everything else (`@expo-google-fonts/chakra-petch`).
+- `Button` variants: primary (cyan), secondary (magenta outline), success (green),
+  outline (dark), danger (red outline), tint (outline in a given colour, e.g. the
+  game colour); `size="small"` is still 44px. Every tappable thing ≥ 44px tall.
+- Animations respect "reduce motion" (`PulseDot` uses reanimated `useReducedMotion`).
+- Every screen has the header: "Better" white + "player" cyan (Exo 2 italic 24),
+  outlined cyan "CLOSED BETA" pill with a soft glow, "18+ · Spain only" in muted grey.
+- Bottom bar: inactive muted grey; active tab cyan with a 5px glowing dot under the
+  label; the centre + is filled cyan with a glow and a 4px background-coloured ring.
+- Match cards: `MatchCard` `compact` (lists: game-coloured 35% border, outlined
+  status pill, small Join in the game colour) and `active` (Home: pulsing dot, glow,
+  "1v1 · Winner gets X credits", "vs …", "Open match room").
 
 ## Before finishing a change
 

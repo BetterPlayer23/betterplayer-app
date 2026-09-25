@@ -19,7 +19,7 @@ import { StatusPill } from '@/components/StatusPill';
 import { StatusStepper } from '@/components/StatusStepper';
 import { TextField } from '@/components/TextField';
 import { gameById } from '@/constants/games';
-import { colors, fonts } from '@/constants/theme';
+import { MIN_TOUCH, colors, fonts, glow } from '@/constants/theme';
 import {
   cancelMatch,
   joinMatch,
@@ -122,7 +122,7 @@ function Room({ match }: { match: Match }) {
         />
       ) : (
         <Card>
-          <StatusStepper status={match.status} />
+          <StatusStepper status={match.status} color={color} />
         </Card>
       )}
 
@@ -270,7 +270,7 @@ function Room({ match }: { match: Match }) {
       {!isPlayer && match.status === 'open' && (
         <Button
           label="Join match"
-          variant="success"
+          variant="secondary"
           onPress={() => run('join', () => joinMatch({ matchId: match.id }))}
           loading={busy === 'join'}
         />
@@ -487,6 +487,8 @@ const styles = StyleSheet.create({
   playerText: {
     flex: 1,
     gap: 2,
+    minHeight: MIN_TOUCH,
+    justifyContent: 'center',
   },
   playerName: {
     fontFamily: fonts.bodySemiBold,
@@ -545,9 +547,12 @@ const styles = StyleSheet.create({
   copy: {
     borderWidth: 1,
     borderColor: colors.accent,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    minHeight: MIN_TOUCH,
+    justifyContent: 'center',
+    boxShadow: glow.badge(colors.accent),
   },
   copyText: {
     fontFamily: fonts.bodySemiBold,

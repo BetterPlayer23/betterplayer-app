@@ -14,7 +14,7 @@ const colorsById: Record<GameId, string> = {
   eafc: '#22C55E',
   'warzone-rebirth': '#F97316',
   fortnite: '#A855F7',
-  'clash-royale': '#29B6FF',
+  'clash-royale': '#38BDF8',
 };
 
 export const games: Game[] = GAMES.map((g) => ({

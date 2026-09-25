@@ -5,9 +5,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { PulseDot } from '@/components/PulseDot';
 import { StatusPill } from '@/components/StatusPill';
 import { gameById } from '@/constants/games';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, glow, withAlpha } from '@/constants/theme';
 import { joinMatch, matchError } from '@/matches/api';
 import type { Match } from '@/matches/types';
 import { formatCredits } from '@/wallet/format';
@@ -16,9 +17,12 @@ export function openMatchRoom(id: string) {
   router.push({ pathname: '/match', params: { id } });
 }
 
-// One match in a list: game, title, host, seats, entry, share code and a
-// Join button (or Open, for matches the player is already in).
-export function MatchCard({ match }: { match: Match }) {
+const formatLabel = (m: Match) => (m.maxPlayers === 2 ? '1v1' : `${m.maxPlayers} players`);
+
+// One match. `compact` (lists): game name, "1v1 · Host … · 1/2", status and a
+// small Join / Open button. `active` (Home): pulsing dot, what the winner
+// gets, who you play against and "Open match room".
+export function MatchCard({ match, variant = 'compact' }: { match: Match; variant?: 'compact' | 'active' }) {
   const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,39 +44,73 @@ export function MatchCard({ match }: { match: Match }) {
     }
   }
 
-  return (
-    <Card style={[styles.card, { borderLeftColor: color }]}>
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={`Open ${match.gameName} match`}
-        onPress={() => openMatchRoom(match.id)}
-        style={styles.body}>
-        <View style={styles.top}>
-          <Text style={[styles.game, { color }]}>{match.gameName}</Text>
-          <StatusPill status={match.status} />
-        </View>
-        {match.title && <Text style={styles.title}>{match.title}</Text>}
-        <Text style={styles.meta}>
-          Host <Text style={styles.metaStrong}>{match.hostGamerTag}</Text> · Players{' '}
-          <Text style={styles.metaStrong}>
-            {match.players.length}/{match.maxPlayers}
-          </Text>
-        </Text>
-        <Text style={styles.meta}>
-          Entry <Text style={styles.metaStrong}>{formatCredits(match.entry)} credits</Text> · Code{' '}
-          <Text style={styles.code}>{match.code}</Text>
-        </Text>
-      </Pressable>
-      {error && <Text style={styles.error}>{error}</Text>}
-      {canJoin ? (
-        <Button label="Join" variant="success" onPress={join} loading={busy} />
-      ) : (
-        <Button
-          label={mine ? 'Open match room' : 'View'}
-          variant="outline"
+  if (variant === 'active') {
+    const rivals = match.players.filter((p) => p.uid !== user?.uid).map((p) => p.gamerTag);
+    return (
+      <Card
+        style={[
+          styles.card,
+          { borderColor: withAlpha(color, 0.35), boxShadow: glow.activeCard(color) },
+        ]}>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${match.gameName} match`}
           onPress={() => openMatchRoom(match.id)}
-        />
-      )}
+          style={styles.body}>
+          <View style={styles.top}>
+            <View style={styles.nameRow}>
+              <PulseDot color={color} />
+              <Text style={[styles.game, { color }]}>{match.gameName}</Text>
+            </View>
+            <StatusPill status={match.status} />
+          </View>
+          {match.title && <Text style={styles.title}>{match.title}</Text>}
+          <Text style={styles.meta}>
+            {formatLabel(match)} · Winner gets{' '}
+            <Text style={styles.metaStrong}>{formatCredits(match.winnerGets)} credits</Text>
+          </Text>
+          <Text style={styles.meta}>
+            vs{' '}
+            <Text style={styles.metaStrong}>
+              {rivals.length ? rivals.join(', ') : 'waiting for a rival'}
+            </Text>
+          </Text>
+        </Pressable>
+        <Button label="Open match room" variant="outline" onPress={() => openMatchRoom(match.id)} />
+      </Card>
+    );
+  }
+
+  return (
+    <Card style={[styles.card, styles.compact, { borderColor: withAlpha(color, 0.35) }]}>
+      <View style={styles.compactRow}>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${match.gameName} match`}
+          onPress={() => openMatchRoom(match.id)}
+          style={styles.compactBody}>
+          <Text style={[styles.game, { color }]}>{match.gameName}</Text>
+          {match.title && <Text style={styles.title}>{match.title}</Text>}
+          <Text style={styles.meta}>
+            {formatLabel(match)} · Host <Text style={styles.metaStrong}>{match.hostGamerTag}</Text>{' '}
+            · {match.players.length}/{match.maxPlayers}
+          </Text>
+        </Pressable>
+        <View style={styles.side}>
+          <StatusPill status={match.status} />
+          {canJoin ? (
+            <Button label="Join" variant="tint" color={color} size="small" onPress={join} loading={busy} />
+          ) : (
+            <Button
+              label={mine ? 'Open' : 'View'}
+              variant="outline"
+              size="small"
+              onPress={() => openMatchRoom(match.id)}
+            />
+          )}
+        </View>
+      </View>
+      {error && <Text style={styles.error}>{error}</Text>}
     </Card>
   );
 }
@@ -80,16 +118,38 @@ export function MatchCard({ match }: { match: Match }) {
 const styles = StyleSheet.create({
   card: {
     gap: 12,
-    borderLeftWidth: 4,
+  },
+  compact: {
+    paddingVertical: 12,
+    gap: 6,
+  },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  compactBody: {
+    flex: 1,
+    gap: 3,
+  },
+  side: {
+    alignItems: 'flex-end',
+    gap: 8,
   },
   body: {
-    gap: 4,
+    gap: 6,
   },
   top: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
   },
   game: {
     fontFamily: fonts.heading,
@@ -104,16 +164,11 @@ const styles = StyleSheet.create({
   meta: {
     fontFamily: fonts.body,
     fontSize: 14,
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
   metaStrong: {
     fontFamily: fonts.bodySemiBold,
     color: colors.text,
-  },
-  code: {
-    fontFamily: fonts.bodyBold,
-    color: colors.accent,
-    letterSpacing: 1,
   },
   error: {
     fontFamily: fonts.bodyMedium,

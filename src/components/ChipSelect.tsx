@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, fonts } from '@/constants/theme';
+import { MIN_TOUCH, colors, fonts, glow, withAlpha } from '@/constants/theme';
 
 type Option<T extends string> = { id: T; label: string };
 
@@ -28,9 +28,9 @@ export function ChipSelect<T extends string>({ label, options, value, onChange, 
               onPress={() => onChange(o.id)}
               style={[
                 styles.chip,
-                selected && { borderColor: colors.primary, backgroundColor: `${colors.primary}33` },
+                selected && styles.chipOn,
               ]}>
-              <Text style={[styles.chipText, selected && { color: colors.text }]}>{o.label}</Text>
+              <Text style={[styles.chipText, selected && { color: colors.primary }]}>{o.label}</Text>
             </Pressable>
           );
         })}
@@ -54,12 +54,20 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  chipOn: {
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+    backgroundColor: withAlpha(colors.primary, 0.1),
+    boxShadow: glow.badge(colors.primary),
+  },
   chip: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.fieldBorder,
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
+    minHeight: MIN_TOUCH,
+    justifyContent: 'center',
   },
   chipText: {
     fontFamily: fonts.bodyMedium,

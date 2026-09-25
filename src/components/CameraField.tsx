@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
-import { colors, fonts } from '@/constants/theme';
+import { MIN_TOUCH, colors, fonts } from '@/constants/theme';
 import { pickScreenshot, takePhoto, type PickedImage } from '@/matches/upload';
 
 // "Take photo" (opens the camera directly), with a preview, Retake and Remove.
@@ -40,10 +40,10 @@ export function CameraField({
         <View style={styles.previewWrap}>
           <Image source={{ uri: value.uri }} style={styles.preview} resizeMode="cover" />
           <View style={styles.links}>
-            <Pressable accessibilityRole="button" onPress={() => open()}>
+            <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => open()}>
               <Text style={styles.link}>Retake</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => onChange(null)}>
+            <Pressable accessibilityRole="button" style={styles.linkButton} onPress={() => onChange(null)}>
               <Text style={styles.link}>Remove</Text>
             </Pressable>
           </View>
@@ -95,6 +95,10 @@ const styles = StyleSheet.create({
   links: {
     flexDirection: 'row',
     gap: 20,
+  },
+  linkButton: {
+    minHeight: MIN_TOUCH,
+    justifyContent: 'center',
   },
   link: {
     fontFamily: fonts.bodySemiBold,

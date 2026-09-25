@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { REVIEW_REASON_LABELS, type ReviewReason, type Verification } from '@shared/games';
 
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, glow, withAlpha } from '@/constants/theme';
 
 const look = {
   match: { label: 'MATCH', color: colors.success },
@@ -19,14 +19,28 @@ export function VerificationBadge({
   verification?: Verification | null;
   reasons?: ReviewReason[];
 }) {
-  const v = verification ? look[verification.status] : null;
+  const base = verification ? look[verification.status] : null;
+  // A "match" below the confidence threshold shows amber (low confidence).
+  const v =
+    base && verification?.status === 'match' && reasons?.includes('low_confidence')
+      ? { ...base, color: colors.awaiting }
+      : base;
   const why = (reasons ?? []).map((r) => REVIEW_REASON_LABELS[r] ?? r).join(' · ');
   return (
     <View style={styles.box}>
       <View style={styles.row}>
         <Text style={styles.title}>Automatic check</Text>
         {v ? (
-          <Text style={[styles.badge, { color: v.color, borderColor: v.color }]}>
+          <Text
+            style={[
+              styles.badge,
+              {
+                color: v.color,
+                borderColor: v.color,
+                backgroundColor: withAlpha(v.color, 0.08),
+                boxShadow: glow.badge(v.color),
+              },
+            ]}>
             {v.label} · {Math.round((verification!.confidence ?? 0) * 100)}%
           </Text>
         ) : (

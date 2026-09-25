@@ -1,16 +1,57 @@
 import { Tabs } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import type { ColorValue } from 'react-native';
+import { StyleSheet, Text, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { AppHeader } from '@/components/AppHeader';
 import { CreateTabButton } from '@/components/CreateTabButton';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, glow } from '@/constants/theme';
 
 function TabIcon({ name, color }: { name: SymbolViewProps['name']; color: ColorValue }) {
   return <SymbolView name={name} tintColor={color} size={24} />;
 }
+
+// Tab label; the active tab also gets a small glowing cyan dot under it.
+function TabLabel({
+  focused,
+  color,
+  children,
+}: {
+  focused: boolean;
+  color: ColorValue;
+  children: string;
+}) {
+  return (
+    <View style={styles.labelWrap}>
+      <Text style={[styles.label, { color }]} numberOfLines={1}>
+        {children}
+      </Text>
+      <View style={[styles.dot, focused && styles.dotOn]} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  labelWrap: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  label: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  dotOn: {
+    backgroundColor: colors.primary,
+    boxShadow: glow.badge(colors.primary),
+  },
+});
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -20,16 +61,21 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         header: () => <AppHeader />,
-        tabBarActiveTintColor: colors.accent,
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
-          backgroundColor: colors.surface,
+          backgroundColor: colors.chrome,
           borderTopColor: colors.border,
-          // A little taller than the default so the labels are not cut off.
-          height: 58 + insets.bottom,
+          // Taller than the default: room for the label and the active dot.
+          height: 66 + insets.bottom,
           paddingBottom: insets.bottom,
+          paddingTop: 6,
         },
-        tabBarLabelStyle: { fontFamily: fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
+        tabBarLabel: ({ focused, color, children }) => (
+          <TabLabel focused={focused} color={color}>
+            {children}
+          </TabLabel>
+        ),
         sceneStyle: { backgroundColor: colors.background },
       }}>
       <Tabs.Screen

@@ -59,13 +59,13 @@ const styles = StyleSheet.create({
   },
   value: {
     fontFamily: fonts.heading,
-    fontSize: 24,
-    color: colors.text,
+    fontSize: 26,
+    color: colors.primary,
   },
   label: {
     fontFamily: fonts.bodyMedium,
     fontSize: 13,
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
   muted: {
     fontFamily: fonts.body,

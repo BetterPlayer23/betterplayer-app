@@ -8,7 +8,7 @@ import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { games } from '@/constants/games';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, withAlpha } from '@/constants/theme';
 import { usePlayerStats } from '@/matches/useStats';
 import { formatCredits } from '@/wallet/format';
 
@@ -63,12 +63,12 @@ function GameSection({ name, color, s }: { name: string; color: string; s: GameS
     ['Skill rating', String(Math.round(s.elo))],
   ];
   return (
-    <Card style={[styles.card, { borderLeftColor: color }]}>
+    <Card style={[styles.card, { borderColor: withAlpha(color, 0.35) }]}>
       <Text style={[styles.game, { color }]}>{name}</Text>
       {rows.map(([label, value]) => (
         <View key={label} style={styles.row}>
           <Text style={styles.label}>{label}</Text>
-          <Text style={styles.value}>{value}</Text>
+          <Text style={[styles.value, { color }]}>{value}</Text>
         </View>
       ))}
     </Card>
@@ -88,7 +88,6 @@ const styles = StyleSheet.create({
   },
   card: {
     gap: 8,
-    borderLeftWidth: 4,
   },
   game: {
     fontFamily: fonts.heading,
@@ -106,8 +105,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   value: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: 15,
-    color: colors.text,
+    fontFamily: fonts.heading,
+    fontSize: 18,
   },
 });

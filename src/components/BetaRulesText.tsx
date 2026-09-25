@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   heading: {
     fontFamily: fonts.bodyBold,
     fontSize: 15,
-    color: colors.accent,
+    color: colors.primary,
   },
   text: {
     fontFamily: fonts.body,

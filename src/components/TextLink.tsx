@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors, fonts } from '@/constants/theme';
+import { MIN_TOUCH, colors, fonts } from '@/constants/theme';
 
 export function TextLink({
   label,
@@ -30,6 +30,8 @@ export function TextLink({
 const styles = StyleSheet.create({
   wrap: {
     paddingVertical: 4,
+    minHeight: MIN_TOUCH,
+    justifyContent: 'center',
   },
   prefix: {
     fontFamily: fonts.body,

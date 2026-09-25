@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
   editButton: {
     paddingHorizontal: 18,
     paddingVertical: 8,
-    minHeight: 40,
+    minHeight: 44,
   },
   info: {
     flexShrink: 1,

@@ -13,11 +13,11 @@ export default function Root({ children }: { children: ReactNode }) {
           name="viewport"
           content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
-        <meta name="theme-color" content="#0E1628" />
+        <meta name="theme-color" content="#0A0C16" />
         <meta name="color-scheme" content="dark" />
         <ScrollViewStyleReset />
         {/* Dark background from the first paint, so there is no white flash. */}
-        <style dangerouslySetInnerHTML={{ __html: 'body { background-color: #070B16; }' }} />
+        <style dangerouslySetInnerHTML={{ __html: 'body { background-color: #07080F; }' }} />
       </head>
       <body>{children}</body>
     </html>

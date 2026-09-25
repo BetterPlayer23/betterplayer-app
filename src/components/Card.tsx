@@ -1,6 +1,6 @@
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
-import { colors } from '@/constants/theme';
+import { colors, radius } from '@/constants/theme';
 
 export function Card({ style, ...props }: ViewProps) {
   return <View style={[styles.card, style]} {...props} />;
@@ -11,7 +11,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 16,
+    borderRadius: radius.card,
     padding: 16,
   },
 });

@@ -3,8 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@expo-google-fonts/chakra-petch": "^0.4.1",
     "@expo-google-fonts/exo-2": "^0.4.2",
-    "@expo-google-fonts/inter": "^0.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.25",
     "expo-clipboard": "~57.0.2",
