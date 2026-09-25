@@ -6,9 +6,10 @@
     "node": "22"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/check-logging.mjs && tsc",
     "typecheck": "tsc --noEmit",
-    "top-up": "npm run build && node lib/scripts/topUpStarterCredits.js"
+    "top-up": "npm run build && node lib/scripts/topUpStarterCredits.js",
+    "check-logging": "node scripts/check-logging.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

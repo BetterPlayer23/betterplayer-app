@@ -26,6 +26,14 @@ Players must be **18+** and in **Spain**.
    services (e.g. `ANTHROPIC_API_KEY`), admin credentials and service accounts belong
    in Cloud Functions (Secret Manager).
 
+5. **Never log secrets.** No API keys, passwords, tokens or whole error objects in
+   logs. In Cloud Functions log errors only with `safeError(e)` / `logError()` from
+   `functions/src/safeLog.ts`; every function runs inside `guardCallable` /
+   `guardBackground`, so the Firebase library never logs a raw error ("Unhandled
+   error"). `functions/scripts/check-logging.mjs` runs on every functions build
+   (and so on every deploy) and fails on `console.*`, `String(e)`, an error object
+   passed to `logger`, or a secret passed to `logger`.
+
 ## Game rules
 
 - Games (short line `tile` on the game tile, full `rules` on the create and match
@@ -110,6 +118,12 @@ Players must be **18+** and in **Spain**.
   existed. Not run by `deploy.sh`. `./top-up.sh` previews, `./top-up.sh --apply` grants. Safe to re-run
   (uses the same idempotent `grantStarterCredits`).
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
+- `BACKLOG.md` – agreed ideas not built yet (native iOS app, Clash Royale battle log).
+- `.github/workflows/inspect-log.yml` – read-only, run by hand (function name + time
+  window): describes WARNING+ log entries WITHOUT printing their text, and says
+  YES/NO whether they contain any of our secrets. Note: GitHub stars out every line
+  of the `GCP_SA_KEY` secret, including lines that are just `{` or `}`, so an empty
+  `{}` shows as `***` in Actions logs; that alone doesn't mean a secret leaked.
 - `.github/workflows/check-match.yml` – read-only, run by hand (two gamer tags): did the
   automatic check run on their latest match, what it returned, and warnings/errors in
   the `submitResult` logs. Prints no emails or in-game names (Actions logs may be public).

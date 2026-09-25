@@ -5,7 +5,6 @@ import {
   type Firestore,
   type Transaction,
 } from 'firebase-admin/firestore';
-import { logger } from 'firebase-functions';
 
 import {
   DISPUTE_REASON_MAX,
@@ -17,6 +16,7 @@ import {
   winnersOf,
   getGame,
 } from '../shared/games';
+import { logError } from '../safeLog';
 import { prepareSettlement, writeSettlement } from './admin';
 import {
   fail,
@@ -114,7 +114,7 @@ async function moveToReview(
   if (!reasons.length) {
     // If anything looks wrong (e.g. a wallet out of step), an admin decides.
     const s = await prepareSettlement(tx, db, ref.id, { ...match, disputed }).catch((e) => {
-      logger.error('Automatic approval not possible', { matchId: ref.id, error: String(e) });
+      logError('Automatic approval not possible', e, { matchId: ref.id });
       return null;
     });
     if (s?.report) {
@@ -352,7 +352,7 @@ export async function closeResponseWindows(db: Firestore, now = new Date()): Pro
       return true;
     }).catch((e) => {
       // One broken match must not hold up the others.
-      logger.error('Couldn’t close the response window', { matchId: doc.id, error: String(e) });
+      logError('Couldn’t close the response window', e, { matchId: doc.id });
       return false;
     });
     if (done) moved++;

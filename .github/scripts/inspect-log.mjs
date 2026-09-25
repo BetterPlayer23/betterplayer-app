@@ -48,7 +48,8 @@ for (const e of entries.reverse()) {
   const firstLine = (e.jsonPayload?.message ?? e.textPayload ?? '').split('\n')[0].trim();
   console.log(`${e.timestamp} ${e.severity}`);
   say('Log name:', String(e.logName).split('/').pop());
-  say('Text is in:', e.textPayload !== undefined ? 'textPayload (plain text)' : e.jsonPayload ? 'jsonPayload (structured)' : 'other');
+  say('Text is in:', e.textPayload !== undefined ? 'textPayload (plain text)' : e.jsonPayload ? 'jsonPayload (structured)' : e.httpRequest ? 'none: a request record (httpRequest)' : 'other');
+  if (e.httpRequest) say('Request answer (HTTP status):', String(e.httpRequest.status ?? '?'));
   if (e.jsonPayload) say('JSON keys:', Object.keys(e.jsonPayload).join(', '));
   say('Length / lines:', `${text.length} characters, ${text.split('\n').length} line(s)`);
   const onlyPunct = /^[\s{}\[\](),:;"'.-]*$/.test(firstLine);

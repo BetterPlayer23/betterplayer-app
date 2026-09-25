@@ -95,7 +95,12 @@ try {
   const entries = JSON.parse(out || '[]');
   if (!entries.length) console.log('No warnings or errors.');
   for (const e of entries.reverse()) {
-    const msg = e.jsonPayload?.message ?? e.textPayload ?? JSON.stringify(e.jsonPayload ?? {});
+    // Request records (run.googleapis.com/requests) have no text, only the
+    // HTTP answer. (An empty "{}" would be starred out by GitHub, because the
+    // deploy key secret contains lines that are just "{" and "}".)
+    const msg = e.httpRequest
+      ? `request answered ${e.httpRequest.status ?? '?'} (${e.httpRequest.latency ?? '?'})`
+      : e.jsonPayload?.message ?? e.textPayload ?? '(no text)';
     const err = e.jsonPayload?.error ? ` | ${String(e.jsonPayload.error)}` : '';
     console.log(`${e.timestamp} ${e.severity}: ${String(msg).split('\n')[0].slice(0, 200)}${err.slice(0, 300)}`);
   }

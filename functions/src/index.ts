@@ -14,6 +14,7 @@ import type { MatchDoc } from './matches/common';
 import * as results from './matches/results';
 import { requireUid } from './matches/common';
 import { acceptRules as acceptRulesAction } from './rules';
+import { guardBackground, guardCallable, registerSecret } from './safeLog';
 import { grantStarterCredits } from './starterGrant';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
@@ -24,12 +25,21 @@ initializeApp();
 // credits. Safe to retry: the grant happens at most once per player.
 export const onUserCreated = onDocumentCreated(
   { document: 'users/{uid}', retry: true },
-  async (event) => {
-    const { uid } = event.params;
-    const granted = await grantStarterCredits(getFirestore(), uid);
-    logger.info(granted ? 'Starter credits granted' : 'Starter credits already granted', { uid });
-  },
+  (event) =>
+    guardBackground(
+      'onUserCreated',
+      async () => {
+        const { uid } = event.params;
+        const granted = await grantStarterCredits(getFirestore(), uid);
+        logger.info(granted ? 'Starter credits granted' : 'Starter credits already granted', { uid });
+      },
+      true, // retried: the grant is idempotent
+    ),
 );
+
+// Logging rule: never log secrets, API keys, passwords or whole error objects.
+// Every function runs inside guardCallable / guardBackground (./safeLog), which
+// log only a cleaned, shortened error description.
 
 // ---- Match flow (round A). The app calls these; it never writes matches,
 // wallets or the ledger itself.
@@ -43,7 +53,7 @@ type Action = (
 const callable = (action: Action, options: CallableOptions = {}) =>
   onCall(options, async (request: CallableRequest<Record<string, unknown> | undefined>) => {
     const uid = requireUid(request.auth);
-    return action(getFirestore(), uid, request.data);
+    return guardCallable(action.name, () => action(getFirestore(), uid, request.data));
   });
 
 export const createMatch = callable(matches.createMatch);
@@ -63,7 +73,11 @@ export const submitResult = onCall(
   { secrets: [anthropicApiKey], timeoutSeconds: 120, memory: '512MiB' },
   async (request: CallableRequest<Record<string, unknown> | undefined>) => {
     const uid = requireUid(request.auth);
-    return results.submitResult(getFirestore(), uid, request.data, new Date(), anthropicApiKey.value());
+    const apiKey = anthropicApiKey.value();
+    registerSecret(apiKey);
+    return guardCallable('submitResult', () =>
+      results.submitResult(getFirestore(), uid, request.data, new Date(), apiKey),
+    );
   },
 );
 export const confirmResult = callable(results.confirmResult);
@@ -76,19 +90,21 @@ export const reverseAutoDecision = callable(admin.reverseAutoDecision);
 // (silence counts as confirmation).
 export const closeResponseWindows = onSchedule(
   { schedule: 'every 5 minutes', timeZone: 'Europe/Madrid' },
-  async () => {
-    const count = await results.closeResponseWindows(getFirestore());
-    if (count) logger.info('Moved matches to review after the deadline', { count });
-  },
+  () =>
+    guardBackground('closeResponseWindows', async () => {
+      const count = await results.closeResponseWindows(getFirestore());
+      if (count) logger.info('Moved matches to review after the deadline', { count });
+    }),
 );
 
 // Every 5 minutes: cancel open matches nobody filled within 15 minutes.
 export const expireOpenMatches = onSchedule(
   { schedule: 'every 5 minutes', timeZone: 'Europe/Madrid' },
-  async () => {
-    const count = await matches.cancelExpiredMatches(getFirestore());
-    if (count) logger.info('Cancelled expired matches', { count });
-  },
+  () =>
+    guardBackground('expireOpenMatches', async () => {
+      const count = await matches.cancelExpiredMatches(getFirestore());
+      if (count) logger.info('Cancelled expired matches', { count });
+    }),
 );
 
 // Beta rules acceptance (saved on users/{uid} with a server timestamp).
@@ -101,16 +117,14 @@ const gmailAppPassword = defineSecret('GMAIL_APP_PASSWORD');
 // When a match becomes under_review, email the admin (once per match).
 export const alertAdminOnReview = onDocumentUpdated(
   { document: 'matches/{matchId}', secrets: [gmailAppPassword], retry: false },
-  async (event) => {
-    const before = event.data?.before.data() as MatchDoc | undefined;
-    const after = event.data?.after.data() as MatchDoc | undefined;
-    if (!after || after.status !== 'under_review' || before?.status === 'under_review') return;
-    const result = await sendReviewAlert(
-      getFirestore(),
-      event.params.matchId,
-      after,
-      gmailAppPassword.value(),
-    );
-    logger.info('Review alert', { matchId: event.params.matchId, result });
-  },
+  (event) =>
+    guardBackground('alertAdminOnReview', async () => {
+      const before = event.data?.before.data() as MatchDoc | undefined;
+      const after = event.data?.after.data() as MatchDoc | undefined;
+      if (!after || after.status !== 'under_review' || before?.status === 'under_review') return;
+      const password = gmailAppPassword.value();
+      registerSecret(password);
+      const result = await sendReviewAlert(getFirestore(), event.params.matchId, after, password);
+      logger.info('Review alert', { matchId: event.params.matchId, result });
+    }),
 );

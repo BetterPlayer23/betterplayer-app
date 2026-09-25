@@ -3,6 +3,7 @@ import { logger } from 'firebase-functions';
 import nodemailer from 'nodemailer';
 
 import { REVIEW_REASON_LABELS, describeOutcome, describeResult, winnersOf } from '../shared/games';
+import { registerSecret } from '../safeLog';
 import type { DisputeDoc, MatchDoc, ReportDoc } from './common';
 
 export const ALERT_FROM = 'Better.player.one@gmail.com';
@@ -56,6 +57,7 @@ export async function sendReviewAlert(
 ): Promise<'sent' | 'already-sent' | 'not-configured'> {
   const alertRef = db.collection('adminAlerts').doc(matchId);
   if ((await alertRef.get()).exists) return 'already-sent';
+  registerSecret(password);
   if (!password || password === SECRET_PLACEHOLDER) {
     logger.warn('Admin email alerts are off: set the GMAIL_APP_PASSWORD secret.', { matchId });
     return 'not-configured';
@@ -79,6 +81,8 @@ export async function sendReviewAlert(
       : nodemailer.createTransport({
           service: 'gmail',
           auth: { user: ALERT_FROM, pass: password },
+          logger: false, // never log SMTP traffic (it includes the login)
+          debug: false,
         });
   await transport.sendMail({ from: `Betterplayer <${ALERT_FROM}>`, to: ALERT_TO, ...email });
 

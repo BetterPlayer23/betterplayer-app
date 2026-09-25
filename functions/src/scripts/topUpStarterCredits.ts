@@ -9,6 +9,7 @@
  *   ./top-up.sh            # preview only, changes nothing
  *   ./top-up.sh --apply    # actually gives the credits
  */
+import { safeError } from '../safeLog';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -56,6 +57,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Top-up failed:', error instanceof Error ? error.message : error);
+  console.error('Top-up failed:', safeError(error).message);
   process.exit(1);
 });

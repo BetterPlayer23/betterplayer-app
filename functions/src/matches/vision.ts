@@ -13,6 +13,7 @@ import {
   type ResultDetails,
   type Verification,
 } from '../shared/games';
+import { logError, registerSecret } from '../safeLog';
 import { fail, type MatchDoc } from './common';
 
 // ---------- config/review (created by hand in the Firebase console)
@@ -207,7 +208,7 @@ export function buildPrompt(game: GameConfig, players: number): string {
 export type VisionRequest = { apiKey: string; model: string; prompt: string; jpeg: Buffer };
 
 async function callClaude({ apiKey, model, prompt, jpeg }: VisionRequest): Promise<VisionReading | null> {
-  const client = new Anthropic({ apiKey, timeout: 40_000, maxRetries: 1 });
+  const client = new Anthropic({ apiKey, timeout: 40_000, maxRetries: 1, logLevel: 'off' });
   const response = await client.messages.create({
     model,
     max_tokens: 1024,
@@ -393,6 +394,7 @@ export async function verifyResult(
     prompt: buildPrompt(opts.game, opts.match.players.length),
     jpeg: opts.image.jpeg,
   };
+  registerSecret(opts.apiKey);
   let reading: VisionReading | null = null;
   try {
     if (process.env.FUNCTIONS_EMULATOR === 'true') {
@@ -412,7 +414,7 @@ export async function verifyResult(
       reading = await callClaude(req);
     }
   } catch (e) {
-    logger.error('Automatic result check failed', { error: String(e) });
+    logError('Automatic result check failed', e);
     return {
       verification: {
         status: 'unreadable',
