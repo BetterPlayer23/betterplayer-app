@@ -172,6 +172,9 @@ Players must be **18+** and in **Spain**.
   The Admin tab shows only for them. `adminDecide(decision, winnerUid?, note)`:
   `approve` (reported winner), `override` (another player), `cancel_refund`.
   Note required (3–500 chars). Writes `admin_reviews/{matchId}`.
+- An admin can never decide a match they played in: `adminDecide` refuses with
+  "You can't review a match you played in", and the Admin tab shows "You played in
+  this match, another admin must review it" with the buttons disabled.
 - Settlement is one idempotent transaction in `functions/src/matches/admin.ts`.
 - Reputation `reputation/{uid}` {points, matchesCompleted, disputesLost}, server-only,
   owner-readable: +1 per completed match; −5 (and disputesLost +1) when your report

@@ -48,6 +48,10 @@ export async function adminDecide(db: Firestore, uid: string, data: Data, now = 
   return db.runTransaction(async (tx) => {
     const match = (await tx.get(ref)).data();
     if (!match) throw fail('not-found', 'This match doesn’t exist.');
+    // An admin never judges their own match: another admin must review it.
+    if (match.playerUids.includes(uid)) {
+      throw fail('permission-denied', "You can't review a match you played in");
+    }
     if (match.status !== 'under_review') {
       throw fail(
         'failed-precondition',

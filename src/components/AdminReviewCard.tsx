@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { ADMIN_NOTE_MAX, ADMIN_NOTE_MIN } from '@shared/games';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ChipSelect } from '@/components/ChipSelect';
@@ -22,6 +23,9 @@ export function AdminReviewCard({ match }: { match: Match }) {
   const disputes = useDisputes(match.id, !!match.disputed);
   const report = reports.data[0];
   const game = gameById(match.game);
+  const { user } = useAuth();
+  // Admins can't review a match they played in (the server refuses it too).
+  const playedIn = !!user && match.playerUids.includes(user.uid);
   const [note, setNote] = useState('');
   const [overrideTo, setOverrideTo] = useState<string | null>(null);
   const [mode, setMode] = useState<'idle' | 'override'>('idle');
@@ -30,6 +34,7 @@ export function AdminReviewCard({ match }: { match: Match }) {
 
   async function decide(decision: Decision) {
     setError(null);
+    if (playedIn) return;
     if (note.trim().length < ADMIN_NOTE_MIN) {
       return setError(
         `Add a note (at least ${ADMIN_NOTE_MIN} characters) explaining your decision.`,
@@ -81,7 +86,15 @@ export function AdminReviewCard({ match }: { match: Match }) {
         placeholder="Why you decided this"
       />
 
-      {mode === 'override' ? (
+      {playedIn && (
+        <View style={styles.ownMatch}>
+          <Text style={styles.ownMatchText}>
+            You played in this match, another admin must review it
+          </Text>
+        </View>
+      )}
+
+      {mode === 'override' && !playedIn ? (
         <>
           <ChipSelect
             label="Real winner"
@@ -106,15 +119,19 @@ export function AdminReviewCard({ match }: { match: Match }) {
             variant="success"
             onPress={() => decide('approve')}
             loading={busy === 'approve'}
-            disabled={!!busy || !report}
+            disabled={!!busy || !report || playedIn}
           />
-          <Button label="Override winner" onPress={() => setMode('override')} disabled={!!busy} />
+          <Button
+            label="Override winner"
+            onPress={() => setMode('override')}
+            disabled={!!busy || playedIn}
+          />
           <Button
             label="Cancel & refund"
             variant="outline"
             onPress={() => decide('cancel_refund')}
             loading={busy === 'cancel_refund'}
-            disabled={!!busy}
+            disabled={!!busy || playedIn}
           />
         </View>
       )}
@@ -161,6 +178,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: colors.textMuted,
+  },
+  ownMatch: {
+    borderWidth: 1,
+    borderColor: colors.awaiting,
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: `${colors.awaiting}1A`,
+  },
+  ownMatchText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.awaiting,
   },
   actions: {
     gap: 10,
