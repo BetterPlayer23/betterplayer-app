@@ -1,0 +1,39 @@
+name: Inspect a log line (no content)
+
+# Read-only diagnostic, run by hand: describes Cloud Functions log entries in a
+# time window WITHOUT printing their text. Says what kind of entry each one is
+# and whether it contains any secret we hold (answers are only YES/NO).
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Function name (lowercase), e.g. submitresult'
+        required: true
+        default: submitresult
+      from:
+        description: 'Start time (UTC), e.g. 2026-09-25T13:47:00Z'
+        required: true
+      to:
+        description: 'End time (UTC), e.g. 2026-09-25T13:48:00Z'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Inspect
+        env:
+          SERVICE: ${{ inputs.service }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+        run: node .github/scripts/inspect-log.mjs
