@@ -3,9 +3,9 @@
 // To change the rules: edit the text AND bump BETA_RULES_VERSION, so every
 // player is asked to accept the new version once.
 
-export const BETA_RULES_VERSION = 'v2';
+export const BETA_RULES_VERSION = 'v3';
 
-export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v2)';
+export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v3)';
 
 export const BETA_RULES_CONTACT_EMAIL = 'Better.player.one@gmail.com';
 
@@ -24,7 +24,7 @@ export const BETA_RULES: readonly { title: string; text: string }[] = [
   },
   {
     title: 'Review',
-    text: "A Betterplayer admin reviews every match. The admin's decision is final during the beta.",
+    text: "Results are checked automatically. If the check is unclear or a player disputes, a Betterplayer admin reviews the match, and the admin's decision is final during the beta.",
   },
   {
     title: 'Beta',

@@ -122,8 +122,9 @@ Players must be **18+** and in **Spain**.
   for existing players, once at next login; checkbox "I am 18+ and accept the beta
   rules"). Read-only `src/app/beta-rules.tsx`, linked from Profile and Sign up.
 - `createMatch` / `joinMatch` refuse players who haven't accepted the current version.
-- Current version: **v2** (section 6 says screenshots are checked by an AI system
-  (Anthropic) and any player can dispute).
+- Current version: **v3**. Section 4 (Review): results are checked automatically;
+  unclear checks and disputes go to an admin, whose decision is final. Section 6
+  says screenshots are checked by an AI system (Anthropic) and any player can dispute.
 
 ## Credits data
 
