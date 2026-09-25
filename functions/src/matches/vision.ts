@@ -145,6 +145,7 @@ export function imageHashDoc(image: LoadedImage, matchId: string, uid: string, k
 export type VisionReading = {
   playerNames: string[];
   scores: number[];
+  damage: number[]; // squads only; empty otherwise
   winnerName: string;
   isFinalScreen: boolean;
   confidence: number;
@@ -156,12 +157,13 @@ const READING_SCHEMA = {
   properties: {
     playerNames: { type: 'array', items: { type: 'string' } },
     scores: { type: 'array', items: { type: 'number' } },
+    damage: { type: 'array', items: { type: 'number' } },
     winnerName: { type: 'string' },
     isFinalScreen: { type: 'boolean' },
     confidence: { type: 'number' },
     notes: { type: 'string' },
   },
-  required: ['playerNames', 'scores', 'winnerName', 'isFinalScreen', 'confidence', 'notes'],
+  required: ['playerNames', 'scores', 'damage', 'winnerName', 'isFinalScreen', 'confidence', 'notes'],
   additionalProperties: false,
 };
 
@@ -169,17 +171,17 @@ const READING_SCHEMA = {
 const HINTS: Record<string, string> = {
   eafc: 'EA FC final whistle (full-time) screen. The final score and both players’ names or team names are near the top. A draw decided on penalties shows the shoot-out score too, often in brackets.',
   'clash-royale':
-    'Clash Royale battle result screen. Both player names are shown with the crowns each won (0 to 3); the winner is usually marked "Winner".',
+    'Clash Royale battle result screen (often a phone screenshot). Both player names are shown with the crowns each won (0 to 3); the winner is usually marked "Winner". A draw shows no winner.',
   'warzone-rebirth':
-    'Call of Duty: Warzone (Rebirth Island) end-of-match scoreboard or placement screen. Read each visible player name and its placement (1 = best).',
+    'Call of Duty: Warzone (Rebirth Island) end-of-match squad scoreboard. Read each squad member’s name, eliminations (kills) and damage.',
   fortnite:
-    'Fortnite end-of-match screen or scoreboard. Read each visible player name and its placement (1 = best, e.g. "#1" or "Victory Royale").',
+    'Fortnite end-of-match squad scoreboard or squad stats screen. Read each squad member’s name, eliminations and damage dealt.',
 };
 
 const SCORE_WORD: Record<GameConfig['resultKind'], string> = {
   goals: 'goals scored (full-time score, not penalties)',
   crowns: 'crowns won (0 to 3)',
-  placement: 'placement (1 = best)',
+  eliminations: 'eliminations (kills)',
 };
 
 export function buildPrompt(game: GameConfig, players: number): string {
@@ -190,7 +192,12 @@ export function buildPrompt(game: GameConfig, players: number): string {
     'Answer with JSON only:',
     '- playerNames: the player names shown in the result, in the order shown.',
     `- scores: one number per name in playerNames, same order: ${SCORE_WORD[game.resultKind]}.`,
-    '- winnerName: the winner’s name exactly as shown, or "" if the screen doesn’t make it clear.',
+    game.resultKind === 'eliminations'
+      ? '- damage: one number per name in playerNames, same order: damage dealt.'
+      : '- damage: [] (not used for this game).',
+    game.resultKind === 'eliminations'
+      ? '- winnerName: "" (the squad scoreboard has no single winner).'
+      : '- winnerName: the winner’s name exactly as shown, or "" if the screen doesn’t make it clear or it is a draw.',
     '- isFinalScreen: true only if this is the game’s final result screen (not a menu, a match still being played, or something else).',
     '- confidence: 0 to 1, how sure you are that the names and scores are read correctly and that this is a genuine, unedited final result screen.',
     '- notes: one short sentence on anything odd (edited, cropped, blurry, another screen), or "".',
@@ -244,6 +251,7 @@ function parseReading(raw: unknown): VisionReading | null {
   return {
     playerNames: r.playerNames.map(String),
     scores: r.scores.map(Number),
+    damage: Array.isArray(r.damage) ? r.damage.map(Number) : [],
     winnerName: typeof r.winnerName === 'string' ? r.winnerName : '',
     isFinalScreen: r.isFinalScreen === true,
     confidence: Math.min(1, Math.max(0, Number(r.confidence) || 0)),
@@ -287,13 +295,14 @@ export function namesMatch(a: string, b: string): boolean {
 
 // ---------- comparing the reading with the report
 
-const SCORE_KEY = { goals: 'goals', crowns: 'crowns', placement: 'placements' } as const;
+const SCORE_KEY = { goals: 'goals', crowns: 'crowns', eliminations: 'eliminations' } as const;
+const SCORE_NAME = { goals: 'goals', crowns: 'crowns', eliminations: 'eliminations' } as const;
 
 export function compareReading(
   reading: VisionReading | null,
   game: GameConfig,
   match: Pick<MatchDoc, 'players'>,
-  report: { winnerUid: string; details: ResultDetails },
+  report: { winnerUids: string[]; details: ResultDetails },
 ): Verification {
   const confidence = reading?.confidence ?? 0;
   const result = (status: Verification['status'], reason: string): Verification => ({
@@ -306,6 +315,10 @@ export function compareReading(
   if (!reading.playerNames.length) return result('unreadable', 'No player names could be read.');
   if (reading.scores.length !== reading.playerNames.length) {
     return result('unreadable', 'The scores couldn’t be read for every name.');
+  }
+  const squad = game.resultKind === 'eliminations';
+  if (squad && reading.damage.length !== reading.playerNames.length) {
+    return result('unreadable', 'The damage couldn’t be read for every name.');
   }
 
   // Find each player's name on the screen (saved game ID, or gamer tag).
@@ -321,19 +334,35 @@ export function compareReading(
   }
 
   const reported = report.details[SCORE_KEY[game.resultKind]] ?? {};
+  const word = SCORE_NAME[game.resultKind];
   for (const p of match.players) {
     const seen = reading.scores[found.get(p.uid)!];
     if (seen !== reported[p.uid]) {
       return result(
         'mismatch',
-        `The screenshot shows ${seen} for ${p.gamerTag}, the report says ${reported[p.uid]}.`,
+        `The screenshot shows ${seen} ${word} for ${p.gamerTag}, the report says ${reported[p.uid]}.`,
       );
     }
+    if (squad) {
+      const dmg = reading.damage[found.get(p.uid)!];
+      const said = report.details.damage?.[p.uid];
+      if (dmg !== said) {
+        return result(
+          'mismatch',
+          `The screenshot shows ${dmg} damage for ${p.gamerTag}, the report says ${said}.`,
+        );
+      }
+    }
   }
+  // Squads: the winners follow from the numbers checked above.
+  if (squad) return result('match', 'Names, eliminations and damage match the report.');
 
-  const winner = match.players.find((p) => p.uid === report.winnerUid)!;
+  const winners = match.players.filter((p) => report.winnerUids.includes(p.uid));
   if (reading.winnerName) {
-    if (!namesMatch(reading.winnerName, winner.gameId) && !namesMatch(reading.winnerName, winner.gamerTag)) {
+    const named = winners.some(
+      (w) => namesMatch(reading.winnerName, w.gameId) || namesMatch(reading.winnerName, w.gamerTag),
+    );
+    if (!named) {
       return result('mismatch', `The screenshot shows ${reading.winnerName} as the winner.`);
     }
   } else if (report.details.penalties) {
@@ -353,7 +382,7 @@ export async function verifyResult(
     apiKey: string;
     game: GameConfig;
     match: Pick<MatchDoc, 'players'>;
-    report: { winnerUid: string; details: ResultDetails };
+    report: { winnerUids: string[]; details: ResultDetails };
     image: LoadedImage;
   },
 ): Promise<{ verification: Verification & { model: string }; reading: VisionReading | null }> {

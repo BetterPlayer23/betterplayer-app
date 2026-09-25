@@ -111,8 +111,10 @@ export function useMatch(id: string | undefined): Live<Match | null> {
 export type Report = {
   uid: string;
   gamerTag: string;
-  winnerUid: string;
-  winnerGamerTag: string;
+  winnerUid: string | null;
+  winnerUids?: string[]; // 2+ = tie, none = draw (older reports only have winnerUid)
+  winnerGamerTag: string | null;
+  draw?: boolean;
   details: import('@shared/games').ResultDetails;
   notes: string | null;
   screenshotPath: string;
@@ -175,6 +177,8 @@ export type AdminReview = {
   decision: 'approve' | 'override' | 'cancel_refund';
   decidedBy?: 'admin' | 'vision'; // missing on decisions made before auto-approval existed
   winner: string | null;
+  winners?: string[];
+  draw?: boolean;
   winnerGamerTag: string | null;
   disputed: boolean;
   players?: { uid: string; gamerTag: string }[];

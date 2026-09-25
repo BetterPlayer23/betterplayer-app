@@ -3,7 +3,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ENTRY_CREDITS, LOBBY_CODE_MAX } from '@shared/games';
+import { ENTRY_CREDITS, LOBBY_CODE_MAX, splitWinnings, winnersOf } from '@shared/games';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
@@ -76,7 +76,9 @@ function Room({ match }: { match: Match }) {
   const reports = useReports(match.id, canSeeResult);
   const disputes = useDisputes(match.id, canSeeResult && !!match.disputed);
   const report = reports.data.find((r) => r.uid === match.reportedByUid) ?? reports.data[0];
-  const winnerTag = match.players.find((p) => p.uid === match.winnerUid)?.gamerTag;
+  const winners = winnersOf(match);
+  const shares = splitWinnings(match.players.length, winners);
+  const tag = (id: string) => match.players.find((p) => p.uid === id)?.gamerTag ?? 'Player';
 
   const [busy, setBusy] = useState<null | 'start' | 'cancel' | 'leave' | 'join'>(null);
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
@@ -103,7 +105,7 @@ function Room({ match }: { match: Match }) {
       {match.title && <Text style={styles.title}>{match.title}</Text>}
 
       <Card style={styles.card}>
-        <Text style={styles.format}>{game?.format}</Text>
+        <Text style={styles.format}>{game?.tile}</Text>
         <Text style={styles.body}>{game?.rules}</Text>
       </Card>
 
@@ -126,14 +128,24 @@ function Room({ match }: { match: Match }) {
 
       {match.status === 'completed' && (
         <Card style={[styles.card, styles.winnerCard]}>
-          <Text style={styles.label}>Winner</Text>
-          <Text style={styles.winner}>{winnerTag ?? '—'}</Text>
+          <Text style={styles.label}>
+            {match.draw ? 'Result' : winners.length > 1 ? 'Winners (tie)' : 'Winner'}
+          </Text>
+          <Text style={styles.winner}>
+            {match.draw ? 'Draw' : winners.map(tag).join(' & ') || '—'}
+          </Text>
           <Text style={styles.body}>
             {match.decidedBy === 'vision'
               ? 'Approved automatically after the photo check.'
               : 'Checked by a Betterplayer admin.'}{' '}
-            {winnerTag} got {formatCredits(match.winnerGets)}{' '}
-            credits.{match.winnerUid === uid ? ' Well played!' : ''}
+            {match.draw
+              ? `Every player got their ${ENTRY_CREDITS} credits back.`
+              : winners.length > 1
+                ? `They share ${formatCredits(match.winnerGets)} credits: ${winners
+                    .map((w) => `${tag(w)} ${formatCredits(shares[w])}`)
+                    .join(', ')}.`
+                : `${tag(winners[0])} got ${formatCredits(match.winnerGets)} credits.`}
+            {winners.includes(uid) ? ' Well played!' : ''}
           </Text>
         </Card>
       )}
@@ -204,13 +216,16 @@ function Room({ match }: { match: Match }) {
           expiresAt={match.status === 'open' ? match.expiresAt?.toMillis() : undefined}
         />
       )}
-      {['open', 'full', 'started'].includes(match.status) && (
-        <LobbyCode match={match} isHost={isHost} isPlayer={isPlayer} />
-      )}
+      {['open', 'full', 'started'].includes(match.status) &&
+        (game?.lobby === 'friend_tags' ? (
+          <FriendTags match={match} uid={uid} isPlayer={isPlayer} />
+        ) : (
+          <LobbyCode match={match} isHost={isHost} isPlayer={isPlayer} />
+        ))}
 
       <SectionTitle>Credits</SectionTitle>
       <Card>
-        <MoneySummary players={match.maxPlayers} />
+        <MoneySummary players={match.maxPlayers} kind={game?.resultKind} />
       </Card>
 
       {message && <FormMessage kind={message.kind} text={message.text} />}
@@ -295,6 +310,47 @@ function ShareCode({ code, expiresAt }: { code: string; expiresAt?: number }) {
       <Text style={styles.small}>
         Send this code to your rival. They can type it in Matches → Join with code.
         {minutesLeft !== null && ` This match closes in ${minutesLeft} min if it doesn’t fill up.`}
+      </Text>
+    </Card>
+  );
+}
+
+// Clash Royale has no lobby code: players add each other as friends with their
+// player tags, then start a Friendly Battle.
+function FriendTags({ match, uid, isPlayer }: { match: Match; uid: string; isPlayer: boolean }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  if (!isPlayer) return null;
+  async function copy(tag: string) {
+    await Clipboard.setStringAsync(tag);
+    setCopied(tag);
+  }
+  return (
+    <Card style={styles.card}>
+      <Text style={styles.label}>Clash Royale player tags</Text>
+      {match.players.map((p) => (
+        <View key={p.uid} style={styles.codeRow}>
+          <View style={styles.flexCol}>
+            <Text style={styles.body}>
+              {p.gamerTag}
+              {p.uid === uid ? ' (you)' : ''}
+            </Text>
+            <Text style={styles.code} selectable>
+              {p.gameId}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Copy ${p.gamerTag}'s player tag`}
+            onPress={() => copy(p.gameId)}
+            style={styles.copy}>
+            <Text style={styles.copyText}>{copied === p.gameId ? 'Copied' : 'Copy'}</Text>
+          </Pressable>
+        </View>
+      ))}
+      <Text style={styles.small}>
+        1. In Clash Royale, add your rival as a friend with their player tag (copy it above).
+        {'\n'}2. Once you are friends, one of you starts a Friendly Battle and the other accepts.
+        {'\n'}3. After the battle, take a screenshot of the result screen and report it here.
       </Text>
     </Card>
   );
@@ -458,6 +514,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     fontSize: 14,
     color: colors.textMuted,
+  },
+  flexCol: {
+    flex: 1,
+    gap: 2,
   },
   codeRow: {
     flexDirection: 'row',

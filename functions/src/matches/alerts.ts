@@ -2,7 +2,7 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import nodemailer from 'nodemailer';
 
-import { REVIEW_REASON_LABELS, describeResult } from '../shared/games';
+import { REVIEW_REASON_LABELS, describeOutcome, describeResult, winnersOf } from '../shared/games';
 import type { DisputeDoc, MatchDoc, ReportDoc } from './common';
 
 export const ALERT_FROM = 'Better.player.one@gmail.com';
@@ -29,7 +29,7 @@ export function buildAlert(
     }`,
     `Game: ${match.gameName}`,
     `Players: ${players}`,
-    `Reported winner: ${report?.winnerGamerTag ?? 'no report'}`,
+    `Reported result: ${report ? describeOutcome(winnersOf(report), match.players) : 'no report'}`,
     `Score: ${report ? describeResult(report.details, match.players) : '—'}`,
     `Disputed: ${match.disputed ? 'yes' : 'no'}`,
   ];

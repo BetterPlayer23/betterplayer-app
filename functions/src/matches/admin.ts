@@ -14,6 +14,8 @@ import {
   REVERSAL_HOURS,
   matchMoney,
   round2,
+  splitWinnings,
+  winnersOf,
 } from '../shared/games';
 import { fail, matchRef, requireString, type MatchDoc, type ReportDoc } from './common';
 
@@ -93,12 +95,33 @@ export async function prepareSettlement(
   };
 }
 
+// What each player gets back into "available" from a settled match:
+// a refund gives everyone their entry back; otherwise the winners share the
+// 80% and the others get nothing. Used to settle and to reverse.
+type Outcome = { refund: true } | { refund: false; winners: string[] };
+
+function creditsFor(match: MatchDoc, outcome: Outcome): Record<string, number> {
+  const out: Record<string, number> = {};
+  const shares = outcome.refund ? {} : splitWinnings(match.players.length, outcome.winners);
+  for (const p of match.playerUids) out[p] = outcome.refund ? ENTRY_CREDITS : (shares[p] ?? 0);
+  return out;
+}
+
+const feeFor = (match: MatchDoc, outcome: Outcome) =>
+  outcome.refund ? 0 : matchMoney(match.players.length).fee;
+
+const tagsOf = (match: MatchDoc, uids: string[]) =>
+  uids.map((u) => match.players.find((p) => p.uid === u)?.gamerTag ?? 'Player').join(' & ');
+
 /**
  * Writes a settlement in the same transaction:
  * - every player's 2 locked credits are released (ledger settle_{matchId}_{uid});
- * - approve/override: the winner gets pot − 20% fee into available ("winnings"),
- *   each loser gets a "stake_lost" entry, the fee goes to platform_ledger/{matchId},
- *   reputation +1 per player, −5 for an overridden report or a rejected dispute;
+ * - approve/override with winners: the winners share pot − 20% fee equally
+ *   ("winnings"; one winner takes it all), everyone else gets "stake_lost",
+ *   the fee goes to platform_ledger/{matchId}; reputation +1 per player, −5
+ *   for an overridden report or a rejected dispute;
+ * - approve with no winners (a Clash Royale draw): every entry is refunded,
+ *   no fee, the match counts as completed;
  * - cancel_refund: each player's 2 credits go back to available ("refund").
  * Fixed document ids make it safe to run twice.
  */
@@ -108,7 +131,7 @@ export function writeSettlement(
   s: Settlement,
   opts: {
     decision: Decision;
-    winnerUid: string | null;
+    winnerUids: string[];
     decidedBy: 'admin' | 'vision';
     adminUid: string | null;
     note: string;
@@ -117,36 +140,41 @@ export function writeSettlement(
   },
 ) {
   const { match, matchId, report } = s;
-  const { decision, winnerUid } = opts;
+  const { decision } = opts;
+  const cancelled = decision === 'cancel_refund';
+  const winners = cancelled ? [] : opts.winnerUids;
+  const draw = !cancelled && winners.length === 0;
+  const outcome: Outcome = cancelled || draw ? { refund: true } : { refund: false, winners };
+  const credits = creditsFor(match, outcome);
   const money = matchMoney(match.players.length);
   const nowTs = Timestamp.fromDate(opts.now);
   const reporterUid = match.reportedByUid ?? '';
   const penalised = new Set<string>();
   if (decision === 'approve') s.disputerUids.forEach((d) => penalised.add(d)); // dispute rejected
   if (decision === 'override' && reporterUid) penalised.add(reporterUid); // report overridden
+  const split = winners.length > 1 ? ` (shared by ${winners.length})` : '';
 
   for (const r of s.rows) {
     if (r.settle.exists) continue; // already settled for this player
-    let entry: { type: string; amount: number; available: number; description: string };
-    if (decision === 'cancel_refund') {
+    let entry: { type: string; amount: number; description: string };
+    if (outcome.refund) {
       entry = {
         type: 'refund',
         amount: ENTRY_CREDITS,
-        available: ENTRY_CREDITS,
-        description: `Refund: ${match.gameName} match cancelled`,
+        description: draw
+          ? `Refund: ${match.gameName} match was a draw`
+          : `Refund: ${match.gameName} match cancelled`,
       };
-    } else if (r.uid === winnerUid) {
+    } else if (winners.includes(r.uid)) {
       entry = {
         type: 'winnings',
-        amount: money.winnerGets,
-        available: money.winnerGets,
-        description: `Winnings: ${match.gameName} match`,
+        amount: credits[r.uid],
+        description: `Winnings: ${match.gameName} match${split}`,
       };
     } else {
       entry = {
         type: 'stake_lost',
         amount: ENTRY_CREDITS,
-        available: 0,
         description: `Entry lost: ${match.gameName} match`,
       };
     }
@@ -155,7 +183,7 @@ export function writeSettlement(
       type: entry.type,
       amount: entry.amount,
       // Effect on the wallet, so balances can be rebuilt from the ledger.
-      availableDelta: entry.available,
+      availableDelta: credits[r.uid],
       lockedDelta: -ENTRY_CREDITS,
       matchId,
       game: match.game,
@@ -167,14 +195,14 @@ export function writeSettlement(
     tx.set(
       r.refs.wallet,
       {
-        available: round2(available + entry.available),
+        available: round2(available + credits[r.uid]),
         locked: round2(locked - ENTRY_CREDITS),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
 
-    if (decision !== 'cancel_refund') {
+    if (!cancelled) {
       const rep = r.reputation.data() ?? {};
       const lost = penalised.has(r.uid);
       tx.set(r.refs.reputation, {
@@ -186,14 +214,14 @@ export function writeSettlement(
     }
   }
 
-  if (decision !== 'cancel_refund') {
+  if (!outcome.refund) {
     tx.set(db.collection('platform_ledger').doc(matchId), {
       matchId,
       game: match.game,
       players: match.players.length,
       pot: money.pot,
       fee: money.fee,
-      winnerUid,
+      winnerUids: winners,
       createdAt: FieldValue.serverTimestamp(),
     });
   }
@@ -205,9 +233,12 @@ export function writeSettlement(
     decidedBy: opts.decidedBy,
     adminUid: opts.adminUid,
     decision,
-    winner: winnerUid,
-    winnerGamerTag: match.players.find((p) => p.uid === winnerUid)?.gamerTag ?? null,
+    winner: winners.length === 1 ? winners[0] : null,
+    winners,
+    draw,
+    winnerGamerTag: winners.length ? tagsOf(match, winners) : null,
     reportedWinner: report?.winnerUid ?? null,
+    reportedWinners: report ? winnersOf(report) : null,
     disputed: !!match.disputed,
     players: match.players.map((p) => ({ uid: p.uid, gamerTag: p.gamerTag })),
     ...(match.verification && {
@@ -223,11 +254,13 @@ export function writeSettlement(
 
   tx.update(s.ref, {
     ...opts.matchUpdate,
-    status: decision === 'cancel_refund' ? 'cancelled' : 'completed',
+    status: cancelled ? 'cancelled' : 'completed',
     decision,
     decidedBy: opts.decidedBy,
-    winnerUid: winnerUid ?? FieldValue.delete(),
-    ...(decision === 'cancel_refund' && { cancelReason: 'admin_refund', cancelledAt: nowTs }),
+    winnerUid: winners.length === 1 ? winners[0] : FieldValue.delete(),
+    winnerUids: winners,
+    draw,
+    ...(cancelled && { cancelReason: 'admin_refund', cancelledAt: nowTs }),
     settledAt: nowTs,
     updatedAt: nowTs,
   });
@@ -236,10 +269,10 @@ export function writeSettlement(
 // ---------- adminDecide
 
 /**
- * adminDecide: approve the reported winner, override it, or cancel and refund.
- * Settles the match in ONE transaction (see writeSettlement). Safe to call
- * twice: a decided match is no longer under_review, and every write uses a
- * fixed document id.
+ * adminDecide: approve the reported result (a winner, a tie or a draw),
+ * override it with one winner, or cancel and refund. Settles the match in
+ * ONE transaction (see writeSettlement). Safe to call twice: a decided match
+ * is no longer under_review, and every write uses a fixed document id.
  */
 export async function adminDecide(db: Firestore, uid: string, data: Data, now = new Date()) {
   const matchId = requireString(data?.matchId, 'match');
@@ -266,40 +299,39 @@ export async function adminDecide(db: Firestore, uid: string, data: Data, now = 
     }
     const s = await prepareSettlement(tx, db, matchId, match);
 
-    let winnerUid: string | null = null;
+    let winnerUids: string[] = [];
     if (decision === 'approve') {
       if (!s.report)
         throw fail('failed-precondition', 'There’s no report to approve. Override instead.');
-      winnerUid = s.report.winnerUid;
+      winnerUids = winnersOf(s.report);
     } else if (decision === 'override') {
       const chosen = typeof data?.winnerUid === 'string' ? data.winnerUid : '';
       if (!match.playerUids.includes(chosen)) throw fail('invalid-argument', 'Choose the winner.');
-      if (s.report && chosen === s.report.winnerUid) {
+      const reported = s.report ? winnersOf(s.report) : null;
+      if (reported && reported.length === 1 && reported[0] === chosen) {
         throw fail('invalid-argument', 'That’s the reported winner: use Approve instead.');
       }
-      winnerUid = chosen;
+      winnerUids = [chosen];
     }
 
-    writeSettlement(tx, db, s, {
-      decision,
-      winnerUid,
-      decidedBy: 'admin',
-      adminUid: uid,
-      note,
-      now,
-    });
-    return { status: decision === 'cancel_refund' ? 'cancelled' : 'completed', winnerUid };
+    writeSettlement(tx, db, s, { decision, winnerUids, decidedBy: 'admin', adminUid: uid, note, now });
+    return {
+      status: decision === 'cancel_refund' ? 'cancelled' : 'completed',
+      winnerUids: decision === 'cancel_refund' ? [] : winnerUids,
+    };
   });
 }
 
 // ---------- reverseAutoDecision
 
 /**
- * Reverses a match approved automatically (decidedBy "vision"), within 24
- * hours: pick the correct winner ("override") or cancel & refund. Old ledger
- * entries are never changed; new "correction"/"refund" entries
- * (reverse_{matchId}_{uid}) move the credits, in ONE transaction with the
- * wallets. Recorded in admin_reviews/{matchId}_reversal. Can happen once.
+ * Reverses a match settled automatically (decidedBy "vision"), within 24
+ * hours: pick the correct single winner ("override") or cancel & refund.
+ * Old ledger entries are never changed: for each player, a new entry
+ * (reverse_{matchId}_{uid}) adds the difference between what they got and
+ * what they should have got, in ONE transaction with the wallets. A fee
+ * difference goes to platform_ledger/{matchId}_reversal. Recorded in
+ * admin_reviews/{matchId}_reversal. Can happen once.
  */
 export async function reverseAutoDecision(
   db: Firestore,
@@ -337,16 +369,28 @@ export async function reverseAutoDecision(
     }
     const settledAt = match.settledAt?.toMillis() ?? 0;
     if (now.getTime() - settledAt > REVERSAL_HOURS * 3600_000) {
-      throw fail('deadline-exceeded', `Automatic decisions can only be reversed within ${REVERSAL_HOURS} hours.`);
+      throw fail(
+        'deadline-exceeded',
+        `Automatic decisions can only be reversed within ${REVERSAL_HOURS} hours.`,
+      );
     }
-    const oldWinner = match.winnerUid ?? '';
-    let newWinner: string | null = null;
+
+    const oldWinners = winnersOf(match);
+    const before: Outcome = match.draw ? { refund: true } : { refund: false, winners: oldWinners };
+    let after: Outcome;
     if (decision === 'override') {
       const chosen = typeof data?.winnerUid === 'string' ? data.winnerUid : '';
       if (!match.playerUids.includes(chosen)) throw fail('invalid-argument', 'Choose the winner.');
-      if (chosen === oldWinner) throw fail('invalid-argument', 'That player already won this match.');
-      newWinner = chosen;
+      if (!before.refund && oldWinners.length === 1 && oldWinners[0] === chosen) {
+        throw fail('invalid-argument', 'That player already won this match.');
+      }
+      after = { refund: false, winners: [chosen] };
+    } else {
+      if (before.refund) throw fail('invalid-argument', 'Every entry was already refunded.');
+      after = { refund: true };
     }
+    const had = creditsFor(match, before);
+    const should = creditsFor(match, after);
 
     const rows = await Promise.all(
       match.playerUids.map(async (p) => {
@@ -368,52 +412,33 @@ export async function reverseAutoDecision(
     const money = matchMoney(match.players.length);
     const nowTs = Timestamp.fromDate(now);
     const game = match.gameName;
+    const newWinners = after.refund ? [] : after.winners;
     for (const r of rows) {
-      let entry: { type: string; delta: number; description: string } | null = null;
-      if (decision === 'override') {
-        if (r.uid === oldWinner) {
-          entry = {
-            type: 'correction',
-            delta: -money.winnerGets,
-            description: `Correction: ${game} match winner changed`,
-          };
-        } else if (r.uid === newWinner) {
-          entry = {
-            type: 'correction',
-            delta: money.winnerGets,
-            description: `Correction: you won this ${game} match`,
-          };
-        }
-      } else if (r.uid === oldWinner) {
-        entry = {
-          type: 'correction',
-          delta: round2(ENTRY_CREDITS - money.winnerGets),
-          description: `Correction: ${game} match cancelled, entry returned`,
-        };
-      } else {
-        entry = {
-          type: 'refund',
-          delta: ENTRY_CREDITS,
-          description: `Refund: ${game} match cancelled`,
-        };
-      }
-      if (entry && !r.entry.exists) {
+      const delta = round2(should[r.uid] - had[r.uid]);
+      if (delta !== 0 && !r.entry.exists) {
+        const plainRefund = after.refund && had[r.uid] === 0; // lost the entry, gets it back
         tx.create(r.refs.entry, {
           uid: r.uid,
-          type: entry.type,
-          amount: entry.delta,
-          availableDelta: entry.delta,
+          type: plainRefund ? 'refund' : 'correction',
+          amount: delta,
+          availableDelta: delta,
           lockedDelta: 0,
           matchId,
           game: match.game,
-          description: entry.description,
+          description: after.refund
+            ? plainRefund
+              ? `Refund: ${game} match cancelled`
+              : `Correction: ${game} match cancelled, entry returned`
+            : newWinners.includes(r.uid)
+              ? `Correction: you won this ${game} match`
+              : `Correction: ${game} match winner changed`,
           reverses: `settle_${matchId}_${r.uid}`,
           createdAt: FieldValue.serverTimestamp(),
         });
         tx.set(
           r.refs.wallet,
           {
-            available: round2(Number(r.wallet.get('available') ?? 0) + entry.delta),
+            available: round2(Number(r.wallet.get('available') ?? 0) + delta),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
@@ -421,7 +446,7 @@ export async function reverseAutoDecision(
       }
 
       const rep = r.reputation.data() ?? {};
-      if (decision === 'cancel_refund') {
+      if (after.refund) {
         // The match no longer counts as completed.
         tx.set(r.refs.reputation, {
           points: Number(rep.points ?? 0) - REPUTATION_COMPLETED,
@@ -440,14 +465,15 @@ export async function reverseAutoDecision(
       }
     }
 
-    if (decision === 'cancel_refund') {
-      // The fee is given back: a new, negative platform entry.
+    // A fee difference is a new platform entry (the old one is never changed).
+    const feeDelta = round2(feeFor(match, after) - feeFor(match, before));
+    if (feeDelta !== 0) {
       tx.set(db.collection('platform_ledger').doc(`${matchId}_reversal`), {
         matchId,
         game: match.game,
         players: match.players.length,
-        pot: -money.pot,
-        fee: -money.fee,
+        pot: feeDelta > 0 ? money.pot : -money.pot,
+        fee: feeDelta,
         reverses: matchId,
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -461,9 +487,10 @@ export async function reverseAutoDecision(
       adminUid: uid,
       decision,
       reverses: matchId,
-      previousWinner: oldWinner,
-      winner: newWinner,
-      winnerGamerTag: match.players.find((p) => p.uid === newWinner)?.gamerTag ?? null,
+      previousWinners: before.refund ? [] : oldWinners,
+      winner: newWinners[0] ?? null,
+      winners: newWinners,
+      winnerGamerTag: newWinners.length ? tagsOf(match, newWinners) : null,
       reportedWinner: reviewSnap.get('reportedWinner') ?? null,
       disputed: false,
       players: match.players.map((p) => ({ uid: p.uid, gamerTag: p.gamerTag })),
@@ -472,15 +499,17 @@ export async function reverseAutoDecision(
     });
 
     tx.update(ref, {
-      status: decision === 'cancel_refund' ? 'cancelled' : 'completed',
+      status: after.refund ? 'cancelled' : 'completed',
       decision,
       decidedBy: 'admin',
-      winnerUid: newWinner ?? FieldValue.delete(),
-      ...(decision === 'cancel_refund' && { cancelReason: 'admin_refund', cancelledAt: nowTs }),
+      winnerUid: newWinners.length === 1 ? newWinners[0] : FieldValue.delete(),
+      winnerUids: newWinners,
+      draw: false,
+      ...(after.refund && { cancelReason: 'admin_refund', cancelledAt: nowTs }),
       reversedAt: nowTs,
       updatedAt: nowTs,
     });
 
-    return { status: decision === 'cancel_refund' ? 'cancelled' : 'completed', winnerUid: newWinner };
+    return { status: after.refund ? 'cancelled' : 'completed', winnerUids: newWinners };
   });
 }

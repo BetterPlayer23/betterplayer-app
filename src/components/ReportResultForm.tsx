@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { NOTES_MAX, checkResult, type ResultDetails } from '@shared/games';
+import { NOTES_MAX, checkResult, describeOutcome, type ResultDetails } from '@shared/games';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -28,6 +28,7 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
   const [winner, setWinner] = useState<string | null>(null);
   const [main, setMain] = useState<Scores>({});
   const [pens, setPens] = useState<Scores>({});
+  const [dmg, setDmg] = useState<Scores>({});
   const [image, setImage] = useState<PickedImage | null>(null);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,30 +40,33 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
   const mainNums = toNumbers(main, uids);
   const level = kind === 'goals' && uids.length === 2 && mainNums[uids[0]] === mainNums[uids[1]];
   const fieldLabel =
-    kind === 'goals' ? 'Goals' : kind === 'crowns' ? 'Crowns (0–3)' : 'Placement (1 = best)';
+    kind === 'goals' ? 'Goals' : kind === 'crowns' ? 'Crowns (0–3)' : 'Eliminations';
 
   function details(): ResultDetails {
     if (kind === 'goals') {
       return { goals: mainNums, ...(level && { penalties: toNumbers(pens, uids) }) };
     }
     if (kind === 'crowns') return { crowns: mainNums };
-    return { placements: mainNums };
+    return { eliminations: mainNums, damage: toNumbers(dmg, uids) };
   }
+  // Clash Royale and squads: the winner (or a tie / draw) follows from the numbers.
+  const chooseWinner = kind === 'goals';
+  const preview = chooseWinner ? null : checkResult(game, uids, null, details());
 
   async function submit() {
     if (busy) return;
     setError(null);
     setImageError(null);
-    if (!winner) return setError('Choose the winner.');
-    const checked = checkResult(game!, uids, winner, details());
+    if (chooseWinner && !winner) return setError('Choose the winner.');
+    const checked = checkResult(game!, uids, chooseWinner ? winner : null, details());
     if ('error' in checked) return setError(checked.error);
-    if (!image) return setImageError('Take a photo of the final result screen.');
+    if (!image) return setImageError('Add a photo of the final result screen.');
     setBusy(true);
     try {
       const screenshotPath = await uploadResultImage(match.id, uid, image);
       await submitResult({
         matchId: match.id,
-        winnerUid: winner,
+        ...(chooseWinner && winner && { winnerUid: winner }),
         details: checked.details,
         screenshotPath,
         notes: notes.trim() || undefined,
@@ -73,7 +77,7 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
     }
   }
 
-  const scoreRow = (label: string, values: Scores, set: (s: Scores) => void) => (
+  const scoreRow = (label: string, values: Scores, set: (s: Scores) => void, max = 3) => (
     <View style={styles.scores}>
       <Text style={styles.label}>{label}</Text>
       {match.players.map((p) => (
@@ -87,7 +91,7 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
             value={values[p.uid] ?? ''}
             onChangeText={(v) => set({ ...values, [p.uid]: v.replace(/[^0-9]/g, '') })}
             keyboardType="number-pad"
-            maxLength={3}
+            maxLength={max}
             placeholder="0"
             placeholderTextColor={colors.textMuted}
             style={styles.input}
@@ -105,17 +109,28 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
         {uids.length > 2 ? 'players' : 'player'} then have 30 minutes to confirm or dispute it.
         The photo is checked automatically.
       </Text>
-      <ChipSelect
-        label="Who won?"
-        options={match.players.map((p) => ({ id: p.uid, label: p.gamerTag }))}
-        value={winner}
-        onChange={setWinner}
-      />
+      {chooseWinner && (
+        <ChipSelect
+          label="Who won?"
+          options={match.players.map((p) => ({ id: p.uid, label: p.gamerTag }))}
+          value={winner}
+          onChange={setWinner}
+        />
+      )}
       {scoreRow(fieldLabel, main, setMain)}
       {level && scoreRow('Penalty shoot-out', pens, setPens)}
+      {kind === 'eliminations' && scoreRow('Damage', dmg, setDmg, 6)}
+      {preview && 'winners' in preview && (
+        <Text style={styles.outcome}>
+          Result: {describeOutcome(preview.winners, match.players)}
+        </Text>
+      )}
       <ResultScreenExample game={game} players={match.players} />
       <CameraField
-        label="Photo of the final result"
+        label={
+          game.capture === 'camera_or_library' ? 'Screenshot or photo of the result' : 'Photo of the final result'
+        }
+        allowLibrary={game.capture === 'camera_or_library'}
         value={image}
         onChange={setImage}
         error={imageError}
@@ -154,6 +169,11 @@ const styles = StyleSheet.create({
   },
   scores: {
     gap: 8,
+  },
+  outcome: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 15,
+    color: colors.accent,
   },
   label: {
     fontFamily: fonts.bodySemiBold,

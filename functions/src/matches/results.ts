@@ -14,6 +14,7 @@ import {
   RESPONSE_MINUTES,
   autoReviewReasons,
   checkResult,
+  winnersOf,
   getGame,
 } from '../shared/games';
 import { prepareSettlement, writeSettlement } from './admin';
@@ -121,7 +122,7 @@ async function moveToReview(
       return () =>
         writeSettlement(tx, db, s, {
           decision: 'approve',
-          winnerUid: s.report!.winnerUid,
+          winnerUids: winnersOf(s.report!),
           decidedBy: 'vision',
           adminUid: null,
           note: `Approved automatically: ${v.reason} (confidence ${v.confidence.toFixed(2)})`,
@@ -152,7 +153,8 @@ export async function submitResult(
   apiKey = '',
 ) {
   const matchId = requireString(data?.matchId, 'match');
-  const winnerUid = requireString(data?.winnerUid, 'winner');
+  // Needed for EA FC; Clash Royale and squads work it out from the numbers.
+  const winnerUid = typeof data?.winnerUid === 'string' ? data.winnerUid : null;
   let notes: string | null = null;
   if (data?.notes !== undefined && data.notes !== null) {
     if (typeof data.notes !== 'string') throw fail('invalid-argument', 'Invalid notes.');
@@ -183,7 +185,7 @@ export async function submitResult(
     if (!game) throw fail('failed-precondition', 'This game is no longer available.');
     const checked = checkResult(game, match.playerUids, winnerUid, data?.details);
     if ('error' in checked) throw fail('invalid-argument', checked.error);
-    return { match, game, details: checked.details };
+    return { match, game, details: checked.details, winners: checked.winners };
   };
   const [matchSnap, reportSnap] = await Promise.all([ref.get(), reportRef.get()]);
   const first = checkMatch(matchSnap.data(), reportSnap.exists);
@@ -202,20 +204,22 @@ export async function submitResult(
     apiKey,
     game: first.game,
     match: first.match,
-    report: { winnerUid, details: first.details },
+    report: { winnerUids: first.winners, details: first.details },
     image: upload.image,
   });
 
   await db.runTransaction(async (tx) => {
     const [snap, existing] = await Promise.all([tx.get(ref), tx.get(reportRef)]);
-    const { match, details } = checkMatch(snap.data(), existing.exists);
+    const { match, details, winners } = checkMatch(snap.data(), existing.exists);
     const nowTs = Timestamp.fromDate(now);
     const byTag = (id: string) => match.players.find((p) => p.uid === id)?.gamerTag ?? 'Player';
     const report: ReportDoc = {
       uid,
       gamerTag: byTag(uid),
-      winnerUid,
-      winnerGamerTag: byTag(winnerUid),
+      winnerUid: winners.length === 1 ? winners[0] : null,
+      winnerUids: winners,
+      winnerGamerTag: winners.length ? winners.map(byTag).join(' & ') : null,
+      draw: !winners.length,
       details,
       notes,
       screenshotPath: upload.image.path,

@@ -19,7 +19,9 @@ export function GameTile({
       <Text style={[styles.name, { color: game.color }]} numberOfLines={2}>
         {game.name}
       </Text>
-      <Text style={styles.players}>{game.players}</Text>
+      <Text style={styles.players} numberOfLines={3}>
+        {game.tile}
+      </Text>
     </>
   );
   const tileStyle = [
@@ -33,7 +35,7 @@ export function GameTile({
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected: !!selected }}
-      accessibilityLabel={`${game.name}, ${game.players}`}
+      accessibilityLabel={`${game.name}, ${game.tile}`}
       onPress={onPress}
       style={({ pressed }) => [tileStyle, pressed && { opacity: 0.85 }]}>
       {content}

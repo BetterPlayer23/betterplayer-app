@@ -36,7 +36,9 @@ export type Match = {
   confirmedUids?: string[];
   disputed?: boolean;
   reviewAt?: Timestamp;
-  winnerUid?: string;
+  winnerUid?: string; // single winner (absent on a tie or draw)
+  winnerUids?: string[]; // 2+ = tie (the 80% is shared), none = draw
+  draw?: boolean; // Clash Royale draw: every entry refunded
   decision?: 'approve' | 'override' | 'cancel_refund';
   settledAt?: Timestamp;
   // Automatic result check (Claude vision)

@@ -77,7 +77,11 @@ export function PastDecisionRow({
       <Text style={styles.text}>
         <Text style={styles.strong}>{review.gameName}</Text> ·{' '}
         <Text style={auto ? styles.auto : undefined}>{label}</Text>
-        {review.winnerGamerTag ? ` · ${review.winnerGamerTag} won` : ''}
+        {review.draw
+          ? ' · draw, refunded'
+          : review.winnerGamerTag
+            ? ` · ${review.winnerGamerTag} ${(review.winners?.length ?? 1) > 1 ? 'shared' : 'won'}`
+            : ''}
         {review.disputed ? ' · disputed' : ''}
         {reversed ? ' · reversed' : ''}
         {'\n'}
@@ -102,7 +106,11 @@ export function PastDecisionRow({
                 label="What should have happened?"
                 options={[
                   ...review
-                    .players!.filter((p) => p.uid !== review.winner)
+                    .players!.filter((p) => {
+                      // Offer everyone except a sole winner (a tie or draw can go to any one player).
+                      const won = review.winners ?? (review.winner ? [review.winner] : []);
+                      return !(won.length === 1 && won[0] === p.uid);
+                    })
                     .map((p) => ({ id: p.uid, label: `${p.gamerTag} won` })),
                   { id: CANCEL, label: 'Cancel & refund' },
                 ]}

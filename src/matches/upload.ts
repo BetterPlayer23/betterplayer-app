@@ -17,14 +17,15 @@ const EXT: Record<string, string> = {
 const TOO_BIG = 'That photo is over 10 MB. Take it again.';
 const WRONG_TYPE = 'That photo format isn’t supported. Take it again with the camera.';
 
-// Web: a file input that asks the phone to open the back camera directly
-// (accept="image/*" capture="environment"); no photo library.
-function takePhotoWeb(): Promise<PickedImage | null> {
+// Web: a file input. With `camera`, it asks the phone to open the back camera
+// directly (accept="image/*" capture="environment"), with no photo library;
+// without it, the phone offers its photo library (for game screenshots).
+function pickWeb(camera: boolean): Promise<PickedImage | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.setAttribute('capture', 'environment');
+    if (camera) input.setAttribute('capture', 'environment');
     input.style.display = 'none';
     const done = () => input.remove();
     input.addEventListener('change', () => {
@@ -49,7 +50,7 @@ function takePhotoWeb(): Promise<PickedImage | null> {
 // cancels. Throws a plain-language Error when permission is refused.
 // Native apps use the system camera for now (expo-camera later).
 export async function takePhoto(): Promise<PickedImage | null> {
-  if (Platform.OS === 'web') return takePhotoWeb();
+  if (Platform.OS === 'web') return pickWeb(true);
   const perm = await ImagePicker.requestCameraPermissionsAsync();
   if (!perm.granted) throw new Error('Allow camera access in Settings to take a photo.');
   const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
@@ -59,6 +60,22 @@ export async function takePhoto(): Promise<PickedImage | null> {
   if (!SCREENSHOT_TYPES.includes(mimeType)) throw new Error(WRONG_TYPE);
   if (asset.fileSize && asset.fileSize > SCREENSHOT_MAX_BYTES) throw new Error(TOO_BIG);
   return { uri: asset.uri, mimeType, fileName: asset.fileName ?? 'photo' };
+}
+
+// Opens the photo library, for games played on the phone (Clash Royale),
+// whose result is a screenshot. The server still refuses reused images and
+// uploads outside the match window.
+export async function pickScreenshot(): Promise<PickedImage | null> {
+  if (Platform.OS === 'web') return pickWeb(false);
+  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!perm.granted) throw new Error('Allow photo access in Settings to add a screenshot.');
+  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
+  if (result.canceled || !result.assets?.[0]) return null;
+  const asset = result.assets[0];
+  const mimeType = asset.mimeType?.toLowerCase() || 'image/png';
+  if (!SCREENSHOT_TYPES.includes(mimeType)) throw new Error(WRONG_TYPE);
+  if (asset.fileSize && asset.fileSize > SCREENSHOT_MAX_BYTES) throw new Error(TOO_BIG);
+  return { uri: asset.uri, mimeType, fileName: asset.fileName ?? 'screenshot' };
 }
 
 // Uploads into results/{matchId}/{uid}/ and returns the storage path.

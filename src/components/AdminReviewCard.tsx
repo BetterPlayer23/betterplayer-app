@@ -15,6 +15,7 @@ import { gameById } from '@/constants/games';
 import { colors, fonts } from '@/constants/theme';
 import { adminDecide, matchError, type Decision } from '@/matches/api';
 import { useDisputes, useReports } from '@/matches/hooks';
+import { describeOutcome, winnersOf } from '@/matches/format';
 import type { Match } from '@/matches/types';
 import { formatCredits } from '@/wallet/format';
 
@@ -102,7 +103,7 @@ export function AdminReviewCard({ match }: { match: Match }) {
           <ChipSelect
             label="Real winner"
             options={match.players
-              .filter((p) => p.uid !== report?.winnerUid)
+              .filter((p) => !(report && winnersOf(report).length === 1 && winnersOf(report)[0] === p.uid))
               .map((p) => ({ id: p.uid, label: p.gamerTag }))}
             value={overrideTo}
             onChange={setOverrideTo}
@@ -118,7 +119,7 @@ export function AdminReviewCard({ match }: { match: Match }) {
       ) : (
         <View style={styles.actions}>
           <Button
-            label={report ? `Approve (${report.winnerGamerTag} wins)` : 'Approve'}
+            label={report ? `Approve (${describeOutcome(winnersOf(report), match.players)})` : 'Approve'}
             variant="success"
             onPress={() => decide('approve')}
             loading={busy === 'approve'}

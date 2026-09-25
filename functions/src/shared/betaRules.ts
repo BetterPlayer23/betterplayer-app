@@ -3,9 +3,9 @@
 // To change the rules: edit the text AND bump BETA_RULES_VERSION, so every
 // player is asked to accept the new version once.
 
-export const BETA_RULES_VERSION = 'v3';
+export const BETA_RULES_VERSION = 'v4';
 
-export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v3)';
+export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v4)';
 
 export const BETA_RULES_CONTACT_EMAIL = 'Better.player.one@gmail.com';
 
@@ -19,8 +19,12 @@ export const BETA_RULES: readonly { title: string; text: string }[] = [
     text: 'Virtual and free, for testing only. They have no cash value and cannot be bought, sold, transferred or exchanged for money or prizes. They may be reset at any time.',
   },
   {
+    title: 'Games and winners',
+    text: 'Every player enters 2 credits. Betterplayer keeps 20% of the pot and the winner gets the other 80%; on a tie it is split equally. EA FC: 1v1, a draw is decided on penalties. Fortnite and Warzone: 2 to 4 Betterplayer players in the same squad; the most eliminations wins, a tie on eliminations goes to the most damage, and players still tied share the credits. Clash Royale: 1v1 Friendly Battle between friends; the most crowns wins and a draw is refunded.',
+  },
+  {
     title: 'Fair play',
-    text: "Report results truthfully, with a screenshot showing the final score and both players' names. Cheating, fake screenshots or arranged results lead to removal.",
+    text: "Report results truthfully, with a photo of the final result screen showing every player's name and score (for Clash Royale, a screenshot). Cheating, fake or reused pictures, or arranged results lead to removal.",
   },
   {
     title: 'Review',

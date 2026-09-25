@@ -36,11 +36,17 @@ export function ResultScreenExample({ game, players }: { game: Game; players: Ma
   } else {
     screen = (
       <>
-        <Text style={styles.caption}>MATCH SUMMARY</Text>
+        <Text style={styles.caption}>SQUAD SCOREBOARD</Text>
+        <View style={styles.placeLine}>
+          <Text style={[styles.name, styles.head]}>Player</Text>
+          <Text style={[styles.stat, styles.head]}>Elims</Text>
+          <Text style={[styles.stat, styles.head]}>Damage</Text>
+        </View>
         {players.map((p, i) => (
           <View key={p.uid} style={styles.placeLine}>
-            <Text style={styles.place}>#{i + 1}</Text>
             <Text style={styles.name} numberOfLines={1}>{name(p)}</Text>
+            <Text style={styles.stat}>{7 - i * 2}</Text>
+            <Text style={styles.stat}>{1450 - i * 320}</Text>
           </View>
         ))}
       </>
@@ -49,14 +55,18 @@ export function ResultScreenExample({ game, players }: { game: Game; players: Ma
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>Photograph this screen</Text>
+      <Text style={styles.title}>
+        {game.capture === 'camera_or_library' ? 'Screenshot or photograph this screen' : 'Photograph this screen'}
+      </Text>
       <View style={[styles.screen, { borderColor: game.color }]}>
         <Text style={[styles.gameName, { color: game.color }]}>{game.name}</Text>
         {screen}
       </View>
       <Text style={styles.help}>
-        {game.resultScreen} Point the camera at the whole screen, with every name and the final
-        score easy to read.
+        {game.resultScreen}{' '}
+        {game.capture === 'camera_or_library'
+          ? 'Take the screenshot on the result screen, with both names and the crowns visible.'
+          : 'Point the camera at the whole screen, with every name and number easy to read.'}
       </Text>
     </View>
   );
@@ -114,6 +124,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  stat: {
+    width: 64,
+    textAlign: 'right',
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.text,
+  },
+  head: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+    color: colors.textMuted,
   },
   place: {
     width: 32,

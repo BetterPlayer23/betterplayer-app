@@ -3,27 +3,29 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { colors, fonts } from '@/constants/theme';
-import { takePhoto, type PickedImage } from '@/matches/upload';
+import { pickScreenshot, takePhoto, type PickedImage } from '@/matches/upload';
 
-// "Take photo" (opens the camera directly, no photo library), with a
-// preview, Retake and Remove.
+// "Take photo" (opens the camera directly), with a preview, Retake and Remove.
+// With allowLibrary (games played on the phone), also "Choose screenshot".
 export function CameraField({
   label,
   value,
   onChange,
   error,
+  allowLibrary = false,
 }: {
   label: string;
+  allowLibrary?: boolean;
   value: PickedImage | null;
   onChange: (image: PickedImage | null) => void;
   error?: string | null;
 }) {
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  async function open() {
+  async function open(source: 'camera' | 'library' = 'camera') {
     setCameraError(null);
     try {
-      const image = await takePhoto();
+      const image = source === 'library' ? await pickScreenshot() : await takePhoto();
       if (image) onChange(image);
     } catch (e) {
       setCameraError(e instanceof Error ? e.message : 'Couldn’t open the camera.');
@@ -38,7 +40,7 @@ export function CameraField({
         <View style={styles.previewWrap}>
           <Image source={{ uri: value.uri }} style={styles.preview} resizeMode="cover" />
           <View style={styles.links}>
-            <Pressable accessibilityRole="button" onPress={open}>
+            <Pressable accessibilityRole="button" onPress={() => open()}>
               <Text style={styles.link}>Retake</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => onChange(null)}>
@@ -47,7 +49,17 @@ export function CameraField({
           </View>
         </View>
       ) : (
-        <Button label="Take photo" variant="outline" onPress={open} />
+        <View style={styles.row}>
+          {allowLibrary && (
+            <Button
+              label="Choose screenshot"
+              variant="outline"
+              onPress={() => open('library')}
+              style={styles.flex}
+            />
+          )}
+          <Button label="Take photo" variant="outline" onPress={() => open()} style={styles.flex} />
+        </View>
       )}
       {shownError && <Text style={styles.error}>{shownError}</Text>}
     </View>
@@ -62,6 +74,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     fontSize: 14,
     color: colors.text,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  flex: {
+    flex: 1,
   },
   previewWrap: {
     gap: 8,

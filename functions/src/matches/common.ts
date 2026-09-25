@@ -55,7 +55,9 @@ export type MatchDoc = {
   confirmedUids?: string[];
   disputed?: boolean;
   reviewAt?: Timestamp; // when it went to under_review (admin queue order)
-  winnerUid?: string; // final winner after admin decision
+  winnerUid?: string; // final single winner (absent on a tie or draw)
+  winnerUids?: string[]; // final winners: 2+ = tie, none = draw
+  draw?: boolean; // a draw: every entry refunded
   decision?: 'approve' | 'override' | 'cancel_refund';
   settledAt?: Timestamp;
   // Automatic result check (Claude vision) and auto-approval
@@ -69,8 +71,10 @@ export type MatchDoc = {
 export type ReportDoc = {
   uid: string;
   gamerTag: string;
-  winnerUid: string;
-  winnerGamerTag: string;
+  winnerUid: string | null; // the single winner (null on a tie or draw)
+  winnerUids?: string[]; // all winners: 2+ = tie (the 80% is split), none = draw (refund)
+  winnerGamerTag: string | null;
+  draw?: boolean;
   details: Record<string, unknown>;
   notes: string | null;
   screenshotPath: string;

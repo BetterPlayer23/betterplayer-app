@@ -46,7 +46,7 @@ export const cancelMatch = (matchId: string) => call('cancelMatch', { matchId })
 
 export type ResultInput = {
   matchId: string;
-  winnerUid: string;
+  winnerUid?: string; // EA FC; the others are worked out from the numbers
   details: Record<string, unknown>;
   screenshotPath: string;
   notes?: string;

@@ -89,7 +89,7 @@ export default function CreateScreen() {
 
           <Card style={styles.card}>
             <Text style={styles.cardTitle}>Rules</Text>
-            <Text style={styles.format}>{game.format}</Text>
+            <Text style={styles.format}>{game.tile}</Text>
             <Text style={styles.body}>{game.rules}</Text>
             <Text style={styles.body}>
               A Betterplayer admin checks every result before any credits move.
@@ -98,7 +98,7 @@ export default function CreateScreen() {
 
           <Card style={styles.card}>
             <Text style={styles.cardTitle}>Credits</Text>
-            <MoneySummary players={playerCount} />
+            <MoneySummary players={playerCount} kind={game?.resultKind} />
           </Card>
 
           <TextField

@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Card } from '@/components/Card';
 import { StorageImage } from '@/components/StorageImage';
 import { colors, fonts } from '@/constants/theme';
-import { describeResult } from '@/matches/format';
+import { describeOutcome, describeResult, winnersOf } from '@/matches/format';
 import type { Dispute, Report } from '@/matches/hooks';
 import type { MatchPlayer } from '@/matches/types';
 
@@ -20,7 +20,7 @@ export function ReportView({
   return (
     <Card style={styles.card}>
       <Text style={styles.label}>Reported by {report.gamerTag}</Text>
-      <Text style={styles.winner}>Winner: {report.winnerGamerTag}</Text>
+      <Text style={styles.winner}>{describeOutcome(winnersOf(report), players)}</Text>
       <Text style={styles.score}>{describeResult(report.details, players)}</Text>
       {report.notes && <Text style={styles.notes}>“{report.notes}”</Text>}
       <StorageImage path={report.screenshotPath} label="Result screenshot" />

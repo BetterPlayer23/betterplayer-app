@@ -28,11 +28,22 @@ Players must be **18+** and in **Spain**.
 
 ## Game rules
 
-- Games:
+- Games (short line `tile` on the game tile, full `rules` on the create and match
+  pages, both in `functions/src/shared/games.ts`):
   - **EA FC**: 1v1. Draws are decided on penalties, so there is always a winner.
-  - **Warzone Rebirth**: 2–4 players.
-  - **Fortnite**: 2–4 players.
-  - **Clash Royale**: 1v1.
+    Tile "1v1 · Draw decided on penalties".
+  - **Fortnite** and **Warzone Rebirth**: squad of 2–4 Betterplayer players in the
+    SAME in-game squad. Most eliminations wins; tie → most damage; still tied → the
+    80% is split equally between the tied players. Report = eliminations + damage
+    per player; proof = the end-of-match squad scoreboard.
+    Tile "Squad 2–4 · Most eliminations wins the pot".
+  - **Clash Royale**: 1v1 Friendly Battle between friends. Most crowns wins; a draw
+    is refunded (every entry back, no fee). No lobby code: the match room shows both
+    players' Clash Royale tags with Copy buttons and how to add each other.
+    Tile "1v1 · Friendly battle · Most crowns wins".
+- Proof capture (`capture` in shared games): EA FC, Fortnite, Warzone = camera only
+  (a console/PC screen); Clash Royale (played on the phone) = camera or a screenshot
+  from the photo library. Duplicate and timing checks apply to both.
 - Every player gets **10 starter credits, once**.
 - Entry is **fixed at 2 credits** per player.
 - Betterplayer always takes a **20% fee of the whole pot** (all entries added
@@ -40,8 +51,10 @@ Players must be **18+** and in **Spain**.
   - 1v1: pot 4 credits, fee 0.80, the winner gets 3.20.
   - 3 players: pot 6 credits, fee 1.20, the winner gets 4.80.
   - 4 players: pot 8 credits, fee 1.60, the winner gets 6.40.
-- **Winner takes all:** in every game the single winner gets the whole 80% left
-  after the fee. Nobody else in the match gets credits back.
+- **Winner takes all:** the winner gets the whole 80% left after the fee. Nobody
+  else in the match gets credits back. On a tie (squads) the tied winners share
+  it equally in cents (`splitWinnings`; leftover cents go to the first tied
+  players in join order, so 6.40 / 3 = 2.14 + 2.13 + 2.13).
 - A player can play **at most 10 matches per day**.
 - **No credits move until a match is validated**: either approved automatically by
   the photo check (only when `config/review.autoApprove` is on and every condition
@@ -97,6 +110,9 @@ Players must be **18+** and in **Spain**.
   existed. Not run by `deploy.sh`. `./top-up.sh` previews, `./top-up.sh --apply` grants. Safe to re-run
   (uses the same idempotent `grantStarterCredits`).
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
+- `.github/workflows/check-match.yml` – read-only, run by hand (two gamer tags): did the
+  automatic check run on their latest match, what it returned, and warnings/errors in
+  the `submitResult` logs. Prints no emails or in-game names (Actions logs may be public).
 
 ## Accounts
 
@@ -122,9 +138,10 @@ Players must be **18+** and in **Spain**.
   for existing players, once at next login; checkbox "I am 18+ and accept the beta
   rules"). Read-only `src/app/beta-rules.tsx`, linked from Profile and Sign up.
 - `createMatch` / `joinMatch` refuse players who haven't accepted the current version.
-- Current version: **v3**. Section 4 (Review): results are checked automatically;
-  unclear checks and disputes go to an admin, whose decision is final. Section 6
-  says screenshots are checked by an AI system (Anthropic) and any player can dispute.
+- Current version: **v4**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
+  (the game rules above), 4 Fair play, 5 Review (checked automatically; unclear
+  checks and disputes go to an admin, whose decision is final), 6 Beta, 7 Your data
+  (screenshots are checked by an AI system (Anthropic); any player can dispute).
 
 ## Credits data
 
@@ -142,7 +159,8 @@ Players must be **18+** and in **Spain**.
 - App labels: "Starter credits", "Entry locked: [game] match", "Winnings",
   "Entry lost", "Entry returned", "Refund". Never "stake" on screen.
   - `correction` / `refund` (`reverse_{matchId}_{uid}`, lockedDelta 0): an admin
-    reversing an automatic decision. Never edits the old `settle_…` entries.
+    reversing an automatic decision; each is the difference between what the
+    player got and should have got (no entry when it's 0). Never edits the old `settle_…` entries.
 - `platform_ledger/{matchId}`: the 20% fee per completed match (server-only).
   `platform_ledger/{matchId}_reversal` gives the fee back (negative) when a reversal
   cancels the match.
@@ -186,9 +204,17 @@ Players must be **18+** and in **Spain**.
 - Reports: `matches/{id}/reports/{uid}`; disputes: `matches/{id}/disputes/{uid}`.
   Readable by players of that match and admins; written only by functions.
 - Score checks live in `checkResult` in `functions/src/shared/games.ts` (used by the
-  app form and the server): EA FC goals (+ penalties only when level, never level),
-  Clash Royale crowns 0–3 (no level results), Warzone/Fortnite distinct placements
-  (1 = best). The winner must match the score.
+  app form and the server). It returns the `winners` (join order): EA FC goals (+
+  penalties only when level; the reporter picks the winner, which must match),
+  Clash Royale crowns 0–3 (level = draw, `winners` empty), Fortnite/Warzone
+  eliminations 0–199 + damage 0–99 999 (tie rules above). For Clash Royale and squads
+  the winner is worked out from the numbers (`winnerUid` optional).
+- Reports and settled matches store `winnerUids` (2+ = tie, none = draw) and
+  `draw`; `winnerUid` only when there is exactly one winner. Use `winnersOf()` to
+  read them (older data only has `winnerUid`). Old reports may have `placements`.
+- A draw settles as `completed` with `draw: true`: `refund` entries for everyone,
+  no `platform_ledger` fee, reputation +1 each. `adminDecide` `approve` uses the
+  reported winners; `override` always sets one winner.
 - Screenshots: Storage `results/{matchId}/{uid}/{file}`. A player of a started or
   awaiting match uploads into their own folder only, after `startedAt` and before
   `responseDeadline`; jpeg/png/webp (no HEIC: the server can't read it), ≤ 10 MB;
@@ -219,8 +245,10 @@ Players must be **18+** and in **Spain**.
 - All server-side (`functions/src/matches/vision.ts`, europe-west1). `submitResult`
   (timeout 120 s, 512 MiB) loads the photo with `sharp`, checks timing and duplicates,
   then sends it to the Anthropic Messages API (`@anthropic-ai/sdk`) with a per-game
-  hint and a JSON schema: `playerNames`, `scores`, `winnerName`, `isFinalScreen`,
-  `confidence` (0–1), `notes`. The prompt never contains the reported names/score.
+  hint and a JSON schema: `playerNames`, `scores` (goals / crowns / eliminations),
+  `damage` (squads only), `winnerName`, `isFinalScreen`, `confidence` (0–1), `notes`.
+  Squads: every player's eliminations and damage must match (no winner name).
+  Clash Royale draw: the picture must not name a winner. The prompt never contains the reported names/score.
 - API key: Firebase secret `ANTHROPIC_API_KEY` (Secret Manager), never in code. Missing
   / placeholder key or API error → the report is still accepted with verification
   `unreadable` and an admin reviews it.

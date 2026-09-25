@@ -4,23 +4,35 @@
 
 export type GameId = 'eafc' | 'clash-royale' | 'warzone-rebirth' | 'fortnite';
 export type GameIdKey = 'eaId' | 'clashRoyaleTag' | 'activisionId' | 'epicName';
-// How a result is reported: goals (+ penalties if level), crowns, or placement.
-export type ResultKind = 'goals' | 'crowns' | 'placement';
+// How a result is reported: goals (+ penalties if level), crowns, or each
+// player's eliminations and damage. ('placement' only exists in old reports.)
+export type ResultKind = 'goals' | 'crowns' | 'eliminations';
 
 export type GameConfig = {
   id: GameId;
   name: string;
   minPlayers: number;
   maxPlayers: number;
-  format: string; // short line, e.g. "1v1 online friendly"
-  rules: string; // how the winner is decided
+  tile: string; // short rules line on the game tile
+  rules: string; // full rules, on the game and match pages
   gameIdKey: GameIdKey; // which profile game ID a player needs
   gameIdLabel: string;
   resultKind: ResultKind;
+  // How players meet in the game: a lobby code from the host, or adding each
+  // other as friends with their player tags (Clash Royale).
+  lobby: 'code' | 'friend_tags';
+  // Result proof: a camera photo of a console/PC screen, or (games played on
+  // the phone) also a screenshot from the photo library.
+  capture: 'camera' | 'camera_or_library';
   // The screen to photograph for the result (shown in the app, and given to
   // the automatic check as a hint).
   resultScreen: string;
 };
+
+const SQUAD_RULES =
+  'Play together in the same squad. When the match ends, the player with the most eliminations wins the pot. Tie on eliminations: most damage wins. Still tied: the pot is split equally between the tied players.';
+const SQUAD_SCREEN =
+  'The end-of-match squad scoreboard: every Betterplayer player’s name with their eliminations and damage.';
 
 export const GAMES: readonly GameConfig[] = [
   {
@@ -28,11 +40,13 @@ export const GAMES: readonly GameConfig[] = [
     name: 'EA FC',
     minPlayers: 2,
     maxPlayers: 2,
-    format: '1v1 online friendly',
+    tile: '1v1 · Draw decided on penalties',
     rules: 'Play an online friendly. A draw is decided on penalties.',
     gameIdKey: 'eaId',
     gameIdLabel: 'EA ID',
     resultKind: 'goals',
+    lobby: 'code',
+    capture: 'camera',
     resultScreen:
       'The full-time screen after the final whistle: the final score and both players’ names at the top.',
   },
@@ -41,39 +55,44 @@ export const GAMES: readonly GameConfig[] = [
     name: 'Clash Royale',
     minPlayers: 2,
     maxPlayers: 2,
-    format: '1v1 friendly battle',
-    rules: 'Play a 1v1 friendly battle.',
+    tile: '1v1 · Friendly battle · Most crowns wins',
+    rules:
+      'Add each other as friends and play a Friendly Battle. Most crowns wins. A draw is refunded.',
     gameIdKey: 'clashRoyaleTag',
     gameIdLabel: 'Clash Royale player tag',
     resultKind: 'crowns',
+    lobby: 'friend_tags',
+    capture: 'camera_or_library',
     resultScreen:
-      'The battle result screen: both players’ names and the crowns each one won.',
+      'The battle result screen (a screenshot is fine): both players’ names and the crowns each one won.',
   },
   {
     id: 'warzone-rebirth',
     name: 'Warzone Rebirth',
     minPlayers: 2,
     maxPlayers: 4,
-    format: 'Private match, 2–4 players',
-    rules: 'Play a private match. Best placement among Betterplayer players wins.',
+    tile: 'Squad 2–4 · Most eliminations wins the pot',
+    rules: SQUAD_RULES,
     gameIdKey: 'activisionId',
     gameIdLabel: 'Activision ID',
-    resultKind: 'placement',
-    resultScreen:
-      'The end-of-match scoreboard: every Betterplayer player’s name and placement.',
+    resultKind: 'eliminations',
+    lobby: 'code',
+    capture: 'camera',
+    resultScreen: SQUAD_SCREEN,
   },
   {
     id: 'fortnite',
     name: 'Fortnite',
     minPlayers: 2,
     maxPlayers: 4,
-    format: 'Private match, 2–4 players',
-    rules: 'Play a private match. Best placement among Betterplayer players wins.',
+    tile: 'Squad 2–4 · Most eliminations wins the pot',
+    rules: SQUAD_RULES,
     gameIdKey: 'epicName',
     gameIdLabel: 'Epic display name',
-    resultKind: 'placement',
-    resultScreen:
-      'The end-of-match scoreboard: every Betterplayer player’s name and placement.',
+    resultKind: 'eliminations',
+    lobby: 'code',
+    capture: 'camera',
+    resultScreen: SQUAD_SCREEN,
   },
 ];
 
@@ -104,6 +123,23 @@ export function matchMoney(players: number) {
   const pot = round2(ENTRY_CREDITS * players);
   const fee = round2(pot * FEE_RATE);
   return { entry: ENTRY_CREDITS, pot, fee, winnerGets: round2(pot - fee) };
+}
+
+/**
+ * How the winners' 80% is shared: equally, in whole cents. Leftover cents
+ * (e.g. 6.40 split 3 ways = 2.14 + 2.13 + 2.13) go to the first winners in
+ * the order given (join order), so the total is always exact.
+ */
+export function splitWinnings(players: number, winnerUids: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!winnerUids.length) return out;
+  const cents = Math.round(matchMoney(players).winnerGets * 100);
+  const base = Math.floor(cents / winnerUids.length);
+  const extra = cents - base * winnerUids.length;
+  winnerUids.forEach((uid, i) => {
+    out[uid] = (base + (i < extra ? 1 : 0)) / 100;
+  });
+  return out;
 }
 
 // Share codes: 6 characters, no 0/O/1/I so they're easy to read out loud.
@@ -182,21 +218,23 @@ export type ResultDetails = {
   goals?: ScoreMap;
   penalties?: ScoreMap; // EA FC only, only when goals are level
   crowns?: ScoreMap;
-  placements?: ScoreMap; // 1 = best
+  eliminations?: ScoreMap; // Fortnite / Warzone
+  damage?: ScoreMap; // Fortnite / Warzone, breaks a tie on eliminations
+  placements?: ScoreMap; // old reports only (1 = best)
 };
 
-const LIMITS: Record<ResultKind, { min: number; max: number; label: string }> = {
+const LIMITS = {
   goals: { min: 0, max: 99, label: 'Goals' },
   crowns: { min: 0, max: 3, label: 'Crowns' },
-  placement: { min: 1, max: 150, label: 'Placement' },
+  eliminations: { min: 0, max: 199, label: 'Eliminations' },
+  damage: { min: 0, max: 99_999, label: 'Damage' },
+  penalties: { min: 0, max: 99, label: 'Penalties' },
 };
 
 function readScores(
   raw: unknown,
   uids: string[],
-  min: number,
-  max: number,
-  label: string,
+  { min, max, label }: { min: number; max: number; label: string },
 ): ScoreMap | string {
   if (!raw || typeof raw !== 'object') return `Enter the ${label.toLowerCase()} for every player.`;
   const out: ScoreMap = {};
@@ -214,75 +252,107 @@ function readScores(
   return out;
 }
 
+// Players with the highest number (all of them when tied).
+const leaders = (uids: string[], scores: ScoreMap) => {
+  const best = Math.max(...uids.map((u) => scores[u]));
+  return uids.filter((u) => scores[u] === best);
+};
+
 /**
- * Checks a reported result and returns clean details, or a plain error
- * message. The winner must match the score:
- * - EA FC: more goals; if goals are level, penalties decide (and must differ).
- * - Clash Royale: more crowns (a level result can't be reported).
- * - Warzone / Fortnite: best (lowest) placement; placements must all differ.
+ * Checks a reported result and works out the winners, or returns a plain
+ * error message. `winners` is in join order; more than one = a tie (the 80%
+ * is split), none = a Clash Royale draw (entries refunded).
+ * - EA FC: more goals; if level, penalties decide (and must differ). The
+ *   reporter must choose the winner, and it must match the score.
+ * - Clash Royale: more crowns; level crowns = a draw.
+ * - Fortnite / Warzone: most eliminations; then most damage; still tied =
+ *   the tied players share.
+ * For Clash Royale and squads, `winnerUid` is optional; if given it must match.
  */
 export function checkResult(
   game: GameConfig,
   playerUids: string[],
-  winnerUid: string,
+  winnerUid: string | null | undefined,
   details: unknown,
-): { details: ResultDetails } | { error: string } {
-  if (!playerUids.includes(winnerUid)) return { error: 'Choose the winner.' };
+): { details: ResultDetails; winners: string[] } | { error: string } {
   const d = (details ?? {}) as Record<string, unknown>;
-  const { min, max, label } = LIMITS[game.resultKind];
+  const given = typeof winnerUid === 'string' && winnerUid ? winnerUid : null;
+  if (given && !playerUids.includes(given)) return { error: 'Choose the winner.' };
+  const mustMatch = (winners: string[], word: string) =>
+    given && (winners.length !== 1 || winners[0] !== given)
+      ? { error: winners.length ? `The winner must be the player with ${word}.` : 'Level result: there’s no winner.' }
+      : null;
 
   if (game.resultKind === 'goals') {
-    const goals = readScores(d.goals, playerUids, min, max, label);
+    if (!given) return { error: 'Choose the winner.' };
+    const goals = readScores(d.goals, playerUids, LIMITS.goals);
     if (typeof goals === 'string') return { error: goals };
     const [a, b] = playerUids;
     if (goals[a] !== goals[b]) {
       if (d.penalties !== undefined && d.penalties !== null) {
         return { error: 'Only add penalties when the goals are level.' };
       }
-      const leader = goals[a] > goals[b] ? a : b;
-      if (leader !== winnerUid) return { error: 'The winner must be the player with more goals.' };
-      return { details: { goals } };
+      const winners = leaders(playerUids, goals);
+      return mustMatch(winners, 'more goals') ?? { details: { goals }, winners };
     }
-    const pens = readScores(d.penalties, playerUids, 0, 99, 'Penalties');
+    const pens = readScores(d.penalties, playerUids, LIMITS.penalties);
     if (typeof pens === 'string') {
       return { error: 'Goals are level: add the penalty shoot-out score.' };
     }
     if (pens[a] === pens[b]) return { error: 'A penalty shoot-out always has a winner.' };
-    const leader = pens[a] > pens[b] ? a : b;
-    if (leader !== winnerUid) {
+    const winners = leaders(playerUids, pens);
+    if (winners[0] !== given) {
       return { error: 'The winner must be the player who won on penalties.' };
     }
-    return { details: { goals, penalties: pens } };
+    return { details: { goals, penalties: pens }, winners };
   }
 
   if (game.resultKind === 'crowns') {
-    const crowns = readScores(d.crowns, playerUids, min, max, label);
+    const crowns = readScores(d.crowns, playerUids, LIMITS.crowns);
     if (typeof crowns === 'string') return { error: crowns };
-    const best = Math.max(...playerUids.map((u) => crowns[u]));
-    const leaders = playerUids.filter((u) => crowns[u] === best);
-    if (leaders.length > 1) return { error: 'Level on crowns: play again to get a winner.' };
-    if (leaders[0] !== winnerUid) {
-      return { error: 'The winner must be the player with more crowns.' };
-    }
-    return { details: { crowns } };
+    const top = leaders(playerUids, crowns);
+    const winners = top.length === 1 ? top : []; // level = draw, refunded
+    return mustMatch(winners, 'more crowns') ?? { details: { crowns }, winners };
   }
 
-  const placements = readScores(d.placements, playerUids, min, max, label);
-  if (typeof placements === 'string') return { error: placements };
-  const values = playerUids.map((u) => placements[u]);
-  if (new Set(values).size !== values.length) {
-    return { error: 'Each player must have a different placement.' };
+  const eliminations = readScores(d.eliminations, playerUids, LIMITS.eliminations);
+  if (typeof eliminations === 'string') return { error: eliminations };
+  const damage = readScores(d.damage, playerUids, LIMITS.damage);
+  if (typeof damage === 'string') return { error: damage };
+  const winners = leaders(leaders(playerUids, eliminations), damage);
+  if (given && !winners.includes(given)) {
+    return { error: 'The winner must be the player with the most eliminations.' };
   }
-  const best = Math.min(...values);
-  if (placements[winnerUid] !== best) {
-    return { error: 'The winner must be the player with the best placement.' };
-  }
-  return { details: { placements } };
+  return { details: { eliminations, damage }, winners };
+}
+
+// "Alpha wins", "Tie: Alpha and Bravo share", "Draw: entries refunded".
+export function describeOutcome(
+  winnerUids: string[],
+  players: { uid: string; gamerTag: string }[],
+): string {
+  const tag = (uid: string) => players.find((p) => p.uid === uid)?.gamerTag ?? 'Player';
+  if (!winnerUids.length) return 'Draw: entries refunded';
+  if (winnerUids.length === 1) return `${tag(winnerUids[0])} wins`;
+  const names = winnerUids.map(tag);
+  return `Tie: ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} share`;
+}
+
+// The winners of a report or match, also for data saved before ties existed.
+export function winnersOf(r: {
+  winnerUids?: string[] | null;
+  winnerUid?: string | null;
+  draw?: boolean;
+}): string[] {
+  if (Array.isArray(r.winnerUids)) return r.winnerUids;
+  if (r.draw) return [];
+  return r.winnerUid ? [r.winnerUid] : [];
 }
 
 // One readable line for a reported score, e.g.
 // "Alpha 1 – 1 Bravo (penalties 5 – 4)", "Alpha 3 – 1 Bravo (crowns)",
-// "1st Charlie · 2nd Bravo · 3rd Alpha". Used by the app and admin emails.
+// "Charlie 7 elim. (1450 dmg) · Alpha 5 elim. (900 dmg)". Used by the app and
+// admin emails.
 const ordinal = (n: number) => {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
@@ -303,6 +373,14 @@ export function describeResult(
   }
   if (details.crowns && a && b) {
     return `${tag(a)} ${details.crowns[a]} – ${details.crowns[b]} ${tag(b)} (crowns)`;
+  }
+  if (details.eliminations) {
+    const elim = details.eliminations;
+    const dmg = details.damage ?? {};
+    return Object.keys(elim)
+      .sort((x, y) => elim[y] - elim[x] || (dmg[y] ?? 0) - (dmg[x] ?? 0))
+      .map((uid) => `${tag(uid)} ${elim[uid]} elim. (${dmg[uid] ?? 0} dmg)`)
+      .join(' · ');
   }
   if (details.placements) {
     return Object.entries(details.placements)
