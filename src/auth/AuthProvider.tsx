@@ -43,6 +43,8 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const ADMIN_RETRY_MS = 30_000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   // undefined = not known yet
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -73,14 +75,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, attempt]);
 
   // Is this player a Betterplayer admin? (Shows the Admin tab.)
+  // If the read is refused (e.g. the live rules don't allow it yet), try again
+  // every 30 s instead of giving up, so the tab appears once the rules are fixed.
   useEffect(() => {
     setIsAdmin(false);
     if (!user) return;
-    return onSnapshot(
-      doc(db, 'admins', user.uid),
-      (snap) => setIsAdmin(snap.exists()),
-      () => setIsAdmin(false),
-    );
+    let unsubscribe: (() => void) | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const listen = () => {
+      unsubscribe = onSnapshot(
+        doc(db, 'admins', user.uid),
+        (snap) => setIsAdmin(snap.exists()),
+        (error) => {
+          console.warn('Admin check failed, retrying in 30 s:', error.code);
+          setIsAdmin(false);
+          retry = setTimeout(listen, ADMIN_RETRY_MS);
+        },
+      );
+    };
+    listen();
+    return () => {
+      unsubscribe?.();
+      if (retry) clearTimeout(retry);
+    };
   }, [user]);
 
   let status: AuthStatus;
