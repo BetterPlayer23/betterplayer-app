@@ -2,7 +2,8 @@
 // Prints only yes/no answers (the repo's Actions logs may be public).
 import { createRequire } from 'module';
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
-const { initializeApp } = require('firebase-admin/app');
+const { initializeApp, cert } = require('firebase-admin/app');
+const { readFileSync } = await import('fs');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 
@@ -11,7 +12,16 @@ const API_KEY = process.env.FIREBASE_WEB_API_KEY; // public web key from src/fir
 const uid = (process.env.CHECK_UID || '').trim();
 if (!uid) throw new Error('Give the uid to check.');
 
-initializeApp({ projectId: PROJECT });
+// Use the deploy key directly so custom tokens are signed locally.
+initializeApp({
+  projectId: PROJECT,
+  credential: cert(JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'))),
+});
+// Never dump error objects (they can be long); print a short message only.
+process.on('unhandledRejection', (e) => {
+  console.log('Check stopped:', String(e?.message ?? e).split('.')[0]);
+  process.exit(1);
+});
 const db = getFirestore();
 const say = (q, a) => console.log(`${q.padEnd(58)} ${a}`);
 
