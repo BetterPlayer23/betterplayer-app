@@ -1,0 +1,38 @@
+name: Check a match's result check
+
+# Read-only diagnostic, run by hand: shows whether the automatic result check
+# (Claude vision) ran on the latest match between two players, what it
+# returned, and any warnings or errors in the submitResult logs.
+# Changes nothing. Prints no emails and no in-game names.
+on:
+  workflow_dispatch:
+    inputs:
+      player1:
+        description: 'Gamer tag of one player'
+        required: true
+      player2:
+        description: 'Gamer tag of the other player'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm --prefix functions ci && npm --prefix functions run build
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Check
+        env:
+          PLAYER1: ${{ inputs.player1 }}
+          PLAYER2: ${{ inputs.player2 }}
+        run: node .github/scripts/check-match.mjs
