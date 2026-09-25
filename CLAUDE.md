@@ -76,7 +76,15 @@ Players must be **18+** and in **Spain**.
 - `firestore.rules`, `firestore.indexes.json` – security rules and indexes.
 - `storage.rules` – Firebase Storage rules for result screenshots.
 - `firebase.json`, `.firebaserc` – Firebase project config (`betterplayer-beta`).
-- `deploy.sh` – wakes Cloud Shell's Google credentials (`gcloud auth print-access-token`;
+- `.github/workflows/firebase-deploy.yml` – **the normal way to deploy Firebase**: on
+  every push to `main` that touches `functions/`, rules, indexes or Firebase config
+  (or "Run workflow" in the Actions tab), deploys functions, Firestore rules and
+  indexes and Storage rules with `--non-interactive --force`. It also grants the
+  Storage service agent `roles/firebaserules.firestoreServiceAgent` (the CLI skips
+  that question when unattended). Uses the repository secret `GCP_SA_KEY` = JSON key
+  of the service account `github-deploy` (roles: Editor, Firebase Admin, Cloud Run
+  Admin, Project IAM Admin, Service Account User). No secret → the job is skipped.
+- `deploy.sh` – fallback from Cloud Shell. Wakes Cloud Shell's Google credentials (`gcloud auth print-access-token`;
   a new session may show an in-shell "Authorize" box), installs the functions
   dependencies and runs `firebase deploy --only
   functions,firestore:rules,firestore:indexes,storage --project betterplayer-beta`. **No
