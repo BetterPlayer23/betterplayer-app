@@ -44,4 +44,7 @@ export type Profile = {
   country: 'ES';
   gameIds: GameIds;
   createdAt: Timestamp | null;
+  // Written only by the acceptRules Cloud Function.
+  acceptedRulesVersion?: string;
+  acceptedAt?: Timestamp | null;
 };

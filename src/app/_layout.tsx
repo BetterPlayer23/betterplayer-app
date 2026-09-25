@@ -126,6 +126,24 @@ function RootNavigator() {
       <Stack.Protected guard={status === 'signedOut'}>
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
+      <Stack.Protected guard={status === 'needsRules'}>
+        <Stack.Screen
+          name="accept-rules"
+          options={{ headerShown: true, header: () => <AppHeader /> }}
+        />
+      </Stack.Protected>
+      {/* Readable by everyone: from Profile and from the Sign up screen. */}
+      <Stack.Screen
+        name="beta-rules"
+        options={{
+          headerShown: true,
+          header: ({ navigation }) => (
+            <AppHeader
+              onBack={() => (navigation.canGoBack() ? navigation.goBack() : router.replace('/'))}
+            />
+          ),
+        }}
+      />
     </Stack>
   );
 }

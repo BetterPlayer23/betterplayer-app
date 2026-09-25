@@ -10,6 +10,7 @@ import * as matches from './matches/actions';
 import * as admin from './matches/admin';
 import * as results from './matches/results';
 import { requireUid } from './matches/common';
+import { acceptRules as acceptRulesAction } from './rules';
 import { grantStarterCredits } from './starterGrant';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
@@ -73,3 +74,6 @@ export const expireOpenMatches = onSchedule(
     if (count) logger.info('Cancelled expired matches', { count });
   },
 );
+
+// Beta rules acceptance (saved on users/{uid} with a server timestamp).
+export const acceptRules = callable(acceptRulesAction);

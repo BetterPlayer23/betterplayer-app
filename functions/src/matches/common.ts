@@ -15,6 +15,7 @@ import {
   type GameConfig,
   type MatchStatus,
 } from '../shared/games';
+import { BETA_RULES_VERSION } from '../shared/betaRules';
 
 export type MatchPlayer = {
   uid: string;
@@ -147,6 +148,9 @@ export async function checkEligible(
   ]);
 
   if (!profile.exists) throw fail('failed-precondition', 'Finish your profile first.');
+  if (profile.get('acceptedRulesVersion') !== BETA_RULES_VERSION) {
+    throw fail('failed-precondition', 'Accept the beta rules first.', { reason: 'rules' });
+  }
   const gameId = profile.get(`gameIds.${game.gameIdKey}`);
   if (typeof gameId !== 'string' || !gameId) {
     throw fail(

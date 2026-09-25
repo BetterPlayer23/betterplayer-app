@@ -113,6 +113,11 @@ export default function SignUpScreen() {
         New accounts receive <Text style={styles.noteStrong}>10 Beta Credits</Text>. Beta Credits
         have no cash value.
       </Text>
+      <TextLink
+        prefix="Before joining:"
+        label="read the beta rules"
+        onPress={() => router.push('/beta-rules')}
+      />
       {formError && <FormMessage kind="error" text={formError} />}
       <Button label="Join closed beta" onPress={submit} loading={busy} />
     </AuthForm>

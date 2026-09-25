@@ -9,7 +9,10 @@ import {
 import { doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
-import { auth, db } from '@/firebase';
+import { BETA_RULES_VERSION } from '@shared/betaRules';
+import { httpsCallable } from 'firebase/functions';
+
+import { auth, db, functions } from '@/firebase';
 
 import type { GameIds, PlatformId, Profile } from './profile';
 
@@ -18,7 +21,14 @@ import type { GameIds, PlatformId, Profile } from './profile';
 // needsProfile: signed in but users/{uid} is missing (sign-up was interrupted)
 // signedIn:     show the tabs
 // error:        couldn't read the profile (e.g. no connection)
-export type AuthStatus = 'loading' | 'signedOut' | 'needsProfile' | 'signedIn' | 'error';
+// needsRules:   profile exists but hasn't accepted the current beta rules
+export type AuthStatus =
+  | 'loading'
+  | 'signedOut'
+  | 'needsProfile'
+  | 'needsRules'
+  | 'signedIn'
+  | 'error';
 
 type AuthContextValue = {
   status: AuthStatus;
@@ -34,6 +44,8 @@ type AuthContextValue = {
   }) => Promise<void>;
   createProfile: (gamerTag: string, platform: PlatformId) => Promise<void>;
   logIn: (email: string, password: string) => Promise<void>;
+  // Accept the current beta rules (saved by a Cloud Function).
+  acceptRules: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logOut: () => Promise<void>;
   updateGamerTag: (gamerTag: string) => Promise<void>;
@@ -107,7 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   else if (creating) status = 'signedOut';
   else if (profileError) status = 'error';
   else if (profile === undefined) status = 'loading';
-  else status = profile ? 'signedIn' : 'needsProfile';
+  else if (!profile) status = 'needsProfile';
+  else if (profile.acceptedRulesVersion !== BETA_RULES_VERSION) status = 'needsRules';
+  else status = 'signedIn';
 
   async function createProfile(gamerTag: string, platform: PlatformId) {
     const current = auth.currentUser;
@@ -138,6 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     createProfile,
+    async acceptRules() {
+      await httpsCallable(functions, 'acceptRules')({ version: BETA_RULES_VERSION });
+    },
     async logIn(email, password) {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     },

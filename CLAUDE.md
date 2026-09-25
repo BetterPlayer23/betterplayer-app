@@ -105,6 +105,20 @@ Players must be **18+** and in **Spain**.
 - The app may only change `gamerTag` and `gameIds` after sign-up.
 - Gamer tag: 3–20 letters, numbers or underscores. Password: at least 8 characters.
 
+## Beta rules acceptance
+
+- Text and version live in `functions/src/shared/betaRules.ts` (`@shared/betaRules`).
+  To change the rules, edit the text **and bump `BETA_RULES_VERSION`**: everyone is
+  then asked to accept the new version once.
+- Callable `acceptRules({ version })` (`functions/src/rules.ts`) writes
+  `acceptedRulesVersion` and `acceptedAt` (server timestamp) on `users/{uid}`. Only
+  the current version; accepting again keeps the first date. The app can't write
+  these fields (users update rule allows only `gamerTag` and `gameIds`).
+- App: `AuthStatus` `needsRules` → `src/app/accept-rules.tsx` (gate after sign-up and,
+  for existing players, once at next login; checkbox "I am 18+ and accept the beta
+  rules"). Read-only `src/app/beta-rules.tsx`, linked from Profile and Sign up.
+- `createMatch` / `joinMatch` refuse players who haven't accepted the current version.
+
 ## Credits data
 
 - `ledger/{entryId}`: `uid`, `type`, `amount`, `description`, `createdAt`. Players

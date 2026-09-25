@@ -145,6 +145,12 @@ export default function ProfileScreen() {
         <Button label="Save game IDs" onPress={saveIds} loading={savingIds} />
       </Card>
 
+      <Button
+        label="Beta rules & privacy"
+        variant="outline"
+        onPress={() => router.push('/beta-rules')}
+        style={styles.logout}
+      />
       {isAdmin && (
         <Button
           label="Admin: review matches"
