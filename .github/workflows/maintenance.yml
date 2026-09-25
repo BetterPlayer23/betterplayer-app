@@ -1,0 +1,45 @@
+name: Maintenance
+
+# One-off data jobs, run by hand. Without "apply" they only preview (count
+# what would change). Prints counts only.
+# - migrate-platforms: users' single "platform" becomes the list "platforms".
+# - rebuild-stats: rebuilds player stats from every settled match.
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Job to run'
+        required: true
+        type: choice
+        options: [migrate-platforms, rebuild-stats]
+      apply:
+        description: 'Apply the changes (otherwise preview only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm --prefix functions ci && npm --prefix functions run build
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Run
+        env:
+          TASK: ${{ inputs.task }}
+          APPLY: ${{ inputs.apply && '--apply' || '' }}
+        run: node functions/lib/scripts/maintenance.js "$TASK" $APPLY

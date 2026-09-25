@@ -12,12 +12,51 @@ import {
   REPUTATION_COMPLETED,
   REPUTATION_PENALTY,
   REVERSAL_HOURS,
+  feeRateOf,
   matchMoney,
   round2,
   splitWinnings,
   winnersOf,
 } from '../shared/games';
+import { removeResult, statsForMatch, type GameStats, type StatsEntry } from '../shared/stats';
 import { fail, matchRef, requireString, type MatchDoc, type ReportDoc } from './common';
+
+// ---------- player stats (playerStats/{uid}, statsEntries/{matchId}; server-only writes)
+
+const statsRef = (db: Firestore, uid: string) => db.collection('playerStats').doc(uid);
+const statsEntryRef = (db: Firestore, matchId: string) =>
+  db.collection('statsEntries').doc(matchId);
+
+function writeStats(
+  tx: Transaction,
+  db: Firestore,
+  match: MatchDoc,
+  matchId: string,
+  changes: Record<string, { stats: GameStats; entry?: StatsEntry }>,
+) {
+  for (const [uid, c] of Object.entries(changes)) {
+    tx.set(
+      statsRef(db, uid),
+      {
+        gamerTag: match.players.find((p) => p.uid === uid)?.gamerTag ?? 'Player',
+        games: { [match.game]: c.stats },
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+  tx.set(statsEntryRef(db, matchId), {
+    matchId,
+    game: match.game,
+    players: Object.fromEntries(
+      Object.entries(changes).flatMap(([uid, c]) => (c.entry ? [[uid, c.entry]] : [])),
+    ),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+const gameStatsOf = (snap: FirebaseFirestore.DocumentSnapshot, game: string) =>
+  snap.get(`games.${game}`) as GameStats | undefined;
 
 type Data = Record<string, unknown> | undefined | null;
 export type Decision = 'approve' | 'override' | 'cancel_refund';
@@ -52,10 +91,11 @@ export async function prepareSettlement(
 ) {
   const ref = matchRef(db, matchId);
   const reviewRef = db.collection('admin_reviews').doc(matchId);
-  const [reviewSnap, reportSnap, disputesSnap] = await Promise.all([
+  const [reviewSnap, reportSnap, disputesSnap, statsEntrySnap] = await Promise.all([
     tx.get(reviewRef),
     tx.get(ref.collection('reports').doc(match.reportedByUid || '_')),
     tx.get(ref.collection('disputes')),
+    tx.get(statsEntryRef(db, matchId)),
   ]);
   if (reviewSnap.exists) throw fail('failed-precondition', 'This match has already been decided.');
 
@@ -66,14 +106,16 @@ export async function prepareSettlement(
         lock: db.collection('ledger').doc(`lock_${matchId}_${p}`),
         settle: db.collection('ledger').doc(`settle_${matchId}_${p}`),
         reputation: db.collection('reputation').doc(p),
+        stats: statsRef(db, p),
       };
-      const [wallet, lock, settle, reputation] = await Promise.all([
+      const [wallet, lock, settle, reputation, stats] = await Promise.all([
         tx.get(refs.wallet),
         tx.get(refs.lock),
         tx.get(refs.settle),
         tx.get(refs.reputation),
+        tx.get(refs.stats),
       ]);
-      return { uid: p, refs, wallet, lock, settle, reputation };
+      return { uid: p, refs, wallet, lock, settle, reputation, stats };
     }),
   );
   for (const r of rows) {
@@ -91,24 +133,27 @@ export async function prepareSettlement(
     reviewRef,
     report: reportSnap.data() as ReportDoc | undefined,
     disputerUids: disputesSnap.docs.map((d) => d.id),
+    statsCounted: statsEntrySnap.exists,
     rows,
   };
 }
 
 // What each player gets back into "available" from a settled match:
 // a refund gives everyone their entry back; otherwise the winners share the
-// 80% and the others get nothing. Used to settle and to reverse.
+// rest of the pot and the others get nothing. Used to settle and to reverse.
 type Outcome = { refund: true } | { refund: false; winners: string[] };
 
 function creditsFor(match: MatchDoc, outcome: Outcome): Record<string, number> {
   const out: Record<string, number> = {};
-  const shares = outcome.refund ? {} : splitWinnings(match.players.length, outcome.winners);
+  const shares = outcome.refund
+    ? {}
+    : splitWinnings(match.players.length, outcome.winners, feeRateOf(match));
   for (const p of match.playerUids) out[p] = outcome.refund ? ENTRY_CREDITS : (shares[p] ?? 0);
   return out;
 }
 
 const feeFor = (match: MatchDoc, outcome: Outcome) =>
-  outcome.refund ? 0 : matchMoney(match.players.length).fee;
+  outcome.refund ? 0 : matchMoney(match.players.length, feeRateOf(match)).fee;
 
 const tagsOf = (match: MatchDoc, uids: string[]) =>
   uids.map((u) => match.players.find((p) => p.uid === u)?.gamerTag ?? 'Player').join(' & ');
@@ -116,7 +161,8 @@ const tagsOf = (match: MatchDoc, uids: string[]) =>
 /**
  * Writes a settlement in the same transaction:
  * - every player's 2 locked credits are released (ledger settle_{matchId}_{uid});
- * - approve/override with winners: the winners share pot − 20% fee equally
+ * - approve/override with winners: the winners share pot − fee equally (the
+ *   match's own fee rate: 10% now, 20% for older matches)
  *   ("winnings"; one winner takes it all), everyone else gets "stake_lost",
  *   the fee goes to platform_ledger/{matchId}; reputation +1 per player, −5
  *   for an overridden report or a rejected dispute;
@@ -146,7 +192,7 @@ export function writeSettlement(
   const draw = !cancelled && winners.length === 0;
   const outcome: Outcome = cancelled || draw ? { refund: true } : { refund: false, winners };
   const credits = creditsFor(match, outcome);
-  const money = matchMoney(match.players.length);
+  const money = matchMoney(match.players.length, feeRateOf(match));
   const nowTs = Timestamp.fromDate(opts.now);
   const reporterUid = match.reportedByUid ?? '';
   const penalised = new Set<string>();
@@ -224,6 +270,12 @@ export function writeSettlement(
       winnerUids: winners,
       createdAt: FieldValue.serverTimestamp(),
     });
+  }
+
+  // Stats: every settled match except a cancel & refund (a draw counts).
+  if (!cancelled && !s.statsCounted) {
+    const current = Object.fromEntries(s.rows.map((r) => [r.uid, gameStatsOf(r.stats, match.game)]));
+    writeStats(tx, db, match, matchId, statsForMatch(matchId, match.playerUids, winners, credits, current));
   }
 
   tx.create(s.reviewRef, {
@@ -351,10 +403,11 @@ export async function reverseAutoDecision(
   const reviewRef = db.collection('admin_reviews').doc(matchId);
   const reversalRef = db.collection('admin_reviews').doc(`${matchId}_reversal`);
   return db.runTransaction(async (tx) => {
-    const [matchSnap, reviewSnap, reversalSnap] = await Promise.all([
+    const [matchSnap, reviewSnap, reversalSnap, statsEntrySnap] = await Promise.all([
       tx.get(ref),
       tx.get(reviewRef),
       tx.get(reversalRef),
+      tx.get(statsEntryRef(db, matchId)),
     ]);
     const match = matchSnap.data();
     if (!match) throw fail('not-found', 'This match doesn’t exist.');
@@ -398,18 +451,20 @@ export async function reverseAutoDecision(
           wallet: db.collection('wallets').doc(p),
           entry: db.collection('ledger').doc(`reverse_${matchId}_${p}`),
           reputation: db.collection('reputation').doc(p),
+          stats: statsRef(db, p),
         };
-        const [wallet, entry, reputation] = await Promise.all([
+        const [wallet, entry, reputation, stats] = await Promise.all([
           tx.get(refs.wallet),
           tx.get(refs.entry),
           tx.get(refs.reputation),
+          tx.get(refs.stats),
         ]);
-        return { uid: p, refs, wallet, entry, reputation };
+        return { uid: p, refs, wallet, entry, reputation, stats };
       }),
     );
 
     // ---- writes
-    const money = matchMoney(match.players.length);
+    const money = matchMoney(match.players.length, feeRateOf(match));
     const nowTs = Timestamp.fromDate(now);
     const game = match.gameName;
     const newWinners = after.refund ? [] : after.winners;
@@ -463,6 +518,28 @@ export async function reverseAutoDecision(
           updatedAt: FieldValue.serverTimestamp(),
         });
       }
+    }
+
+    // Stats: take the old result out, then count the corrected one (a cancel
+    // & refund doesn't count at all).
+    const oldEntries = (statsEntrySnap.get('players') ?? {}) as Record<string, StatsEntry>;
+    const base = Object.fromEntries(
+      rows.map((r) => {
+        const cur = gameStatsOf(r.stats, match.game);
+        const old = oldEntries[r.uid];
+        return [r.uid, old ? removeResult(cur, matchId, old) : cur];
+      }),
+    );
+    if (after.refund) {
+      writeStats(
+        tx,
+        db,
+        match,
+        matchId,
+        Object.fromEntries(Object.entries(base).flatMap(([u, st]) => (st ? [[u, { stats: st }]] : []))),
+      );
+    } else {
+      writeStats(tx, db, match, matchId, statsForMatch(matchId, match.playerUids, newWinners, should, base));
     }
 
     // A fee difference is a new platform entry (the old one is never changed).

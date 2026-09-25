@@ -6,7 +6,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import { doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { BETA_RULES_VERSION } from '@shared/betaRules';
@@ -40,9 +40,9 @@ type AuthContextValue = {
     email: string;
     password: string;
     gamerTag: string;
-    platform: PlatformId;
+    platforms: PlatformId[];
   }) => Promise<void>;
-  createProfile: (gamerTag: string, platform: PlatformId) => Promise<void>;
+  createProfile: (gamerTag: string, platforms: PlatformId[]) => Promise<void>;
   logIn: (email: string, password: string) => Promise<void>;
   // Accept the current beta rules (saved by a Cloud Function).
   acceptRules: () => Promise<void>;
@@ -50,6 +50,7 @@ type AuthContextValue = {
   logOut: () => Promise<void>;
   updateGamerTag: (gamerTag: string) => Promise<void>;
   updateGameIds: (gameIds: GameIds) => Promise<void>;
+  updatePlatforms: (platforms: PlatformId[]) => Promise<void>;
   retry: () => void;
 };
 
@@ -123,12 +124,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   else if (profile.acceptedRulesVersion !== BETA_RULES_VERSION) status = 'needsRules';
   else status = 'signedIn';
 
-  async function createProfile(gamerTag: string, platform: PlatformId) {
+  async function createProfile(gamerTag: string, platforms: PlatformId[]) {
     const current = auth.currentUser;
     if (!current) throw new Error('Not signed in');
     await setDoc(doc(db, 'users', current.uid), {
       gamerTag: gamerTag.trim(),
-      platform,
+      platforms,
       ageConfirmed: true,
       ageConfirmedAt: serverTimestamp(),
       country: 'ES', // self-declared
@@ -142,11 +143,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: user ?? null,
     profile: profile ?? null,
     isAdmin,
-    async signUp({ email, password, gamerTag, platform }) {
+    async signUp({ email, password, gamerTag, platforms }) {
       setCreating(true);
       try {
         await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await createProfile(gamerTag, platform);
+        await createProfile(gamerTag, platforms);
       } finally {
         setCreating(false);
       }
@@ -171,6 +172,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async updateGameIds(gameIds) {
       if (!user) return;
       await updateDoc(doc(db, 'users', user.uid), { gameIds });
+    },
+    async updatePlatforms(platforms) {
+      if (!user) return;
+      // Also removes the old single "platform" field of older profiles.
+      await updateDoc(doc(db, 'users', user.uid), { platforms, platform: deleteField() });
     },
     retry: () => setAttempt((n) => n + 1),
   };

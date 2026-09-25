@@ -1,9 +1,9 @@
 import * as Clipboard from 'expo-clipboard';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ENTRY_CREDITS, LOBBY_CODE_MAX, splitWinnings, winnersOf } from '@shared/games';
+import { ENTRY_CREDITS, LOBBY_CODE_MAX, feeRateOf, splitWinnings, winnersOf } from '@shared/games';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
@@ -77,7 +77,7 @@ function Room({ match }: { match: Match }) {
   const disputes = useDisputes(match.id, canSeeResult && !!match.disputed);
   const report = reports.data.find((r) => r.uid === match.reportedByUid) ?? reports.data[0];
   const winners = winnersOf(match);
-  const shares = splitWinnings(match.players.length, winners);
+  const shares = splitWinnings(match.players.length, winners, feeRateOf(match));
   const tag = (id: string) => match.players.find((p) => p.uid === id)?.gamerTag ?? 'Player';
 
   const [busy, setBusy] = useState<null | 'start' | 'cancel' | 'leave' | 'join'>(null);
@@ -190,15 +190,20 @@ function Room({ match }: { match: Match }) {
       <Card style={styles.list}>
         {match.players.map((p, i) => (
           <View key={p.uid} style={[styles.player, i > 0 && styles.divider]}>
-            <View style={styles.playerText}>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`See ${p.gamerTag}'s stats`}
+              onPress={() => router.push({ pathname: '/stats', params: { uid: p.uid } })}
+              style={styles.playerText}>
               <Text style={styles.playerName}>
                 {p.gamerTag}
                 {p.uid === uid ? ' (you)' : ''}
+                <Text style={styles.statsLink}> · stats ›</Text>
               </Text>
               <Text style={styles.playerId}>
                 {game?.gameIdLabel}: {p.gameId}
               </Text>
-            </View>
+            </Pressable>
             {p.uid === match.hostUid && <Text style={styles.hostBadge}>HOST</Text>}
           </View>
         ))}
@@ -225,7 +230,7 @@ function Room({ match }: { match: Match }) {
 
       <SectionTitle>Credits</SectionTitle>
       <Card>
-        <MoneySummary players={match.maxPlayers} kind={game?.resultKind} />
+        <MoneySummary players={match.maxPlayers} kind={game?.resultKind} feeRate={feeRateOf(match)} />
       </Card>
 
       {message && <FormMessage kind={message.kind} text={message.text} />}
@@ -514,6 +519,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     fontSize: 14,
     color: colors.textMuted,
+  },
+  statsLink: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+    color: colors.accent,
   },
   flexCol: {
     flex: 1,

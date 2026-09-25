@@ -25,6 +25,14 @@ service cloud.firestore {
         && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.playerUids;
     }
 
+    // The platforms a player plays on: 1 to 5 of these, no repeats.
+    function validPlatforms(p) {
+      return p is list
+        && p.size() >= 1 && p.size() <= 5
+        && p.hasOnly(['pc', 'playstation', 'xbox', 'switch', 'mobile'])
+        && p.toSet().size() == p.size();
+    }
+
     function validGamerTag(tag) {
       return tag is string && tag.matches('^[A-Za-z0-9_]{3,20}$');
     }
@@ -50,25 +58,30 @@ service cloud.firestore {
 
       allow create: if isOwner(uid)
         && request.resource.data.keys().hasOnly([
-             'gamerTag', 'platform', 'ageConfirmed', 'ageConfirmedAt',
+             'gamerTag', 'platforms', 'ageConfirmed', 'ageConfirmedAt',
              'country', 'gameIds', 'createdAt'])
         && request.resource.data.keys().hasAll([
-             'gamerTag', 'platform', 'ageConfirmed', 'ageConfirmedAt',
+             'gamerTag', 'platforms', 'ageConfirmed', 'ageConfirmedAt',
              'country', 'gameIds', 'createdAt'])
         && validGamerTag(request.resource.data.gamerTag)
-        && request.resource.data.platform in ['pc', 'playstation', 'xbox', 'mobile']
+        && validPlatforms(request.resource.data.platforms)
         && request.resource.data.ageConfirmed == true
         && request.resource.data.ageConfirmedAt == request.time
         && request.resource.data.country == 'ES'
         && validGameIds(request.resource.data.gameIds)
         && request.resource.data.createdAt == request.time;
 
-      // Players may only change their gamer tag and game IDs.
+      // Players may only change their gamer tag, game IDs and platforms (and
+      // remove the old single "platform" field when they save platforms).
       allow update: if isOwner(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['gamerTag', 'gameIds'])
+             .hasOnly(['gamerTag', 'gameIds', 'platforms', 'platform'])
+        && !('platform' in request.resource.data
+             && request.resource.data.diff(resource.data).affectedKeys().hasAny(['platform']))
         && validGamerTag(request.resource.data.gamerTag)
-        && validGameIds(request.resource.data.gameIds);
+        && validGameIds(request.resource.data.gameIds)
+        && (!('platforms' in request.resource.data)
+            || validPlatforms(request.resource.data.platforms));
 
       allow delete: if false;
     }
@@ -115,6 +128,20 @@ service cloud.firestore {
     // Admin tab). Created by hand in the console, never from the app.
     match /admins/{uid} {
       allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // playerStats/{uid}: stats per game from settled matches (server-only).
+    // Any signed-in player can read them, e.g. to check an opponent.
+    match /playerStats/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // config/fees: the current fee rate, shown in the app. Changed by hand in
+    // the console. (Other config documents stay closed.)
+    match /config/fees {
+      allow read: if request.auth != null;
       allow write: if false;
     }
 

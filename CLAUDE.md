@@ -54,15 +54,23 @@ Players must be **18+** and in **Spain**.
   from the photo library. Duplicate and timing checks apply to both.
 - Every player gets **10 starter credits, once**.
 - Entry is **fixed at 2 credits** per player.
-- Betterplayer always takes a **20% fee of the whole pot** (all entries added
-  together), whatever the number of players. It is simulated: credits only, no money.
-  - 1v1: pot 4 credits, fee 0.80, the winner gets 3.20.
-  - 3 players: pot 6 credits, fee 1.20, the winner gets 4.80.
-  - 4 players: pot 8 credits, fee 1.60, the winner gets 6.40.
-- **Winner takes all:** the winner gets the whole 80% left after the fee. Nobody
+- Betterplayer takes a **10% fee of the whole pot** (all entries added together),
+  whatever the number of players. It is simulated: credits only, no money.
+  - 1v1: pot 4 credits, fee 0.40, the winner gets 3.60.
+  - 3 players: pot 6 credits, fee 0.60, the winner gets 5.40.
+  - 4 players: pot 8 credits, fee 0.80, the winner gets 7.20.
+- **The fee rate lives in Firestore `config/fees.rate`** (0.10; missing or invalid →
+  `DEFAULT_FEE_RATE` 0.10). `createMatch` reads it and stores `feeRate` (with `pot`,
+  `fee`, `winnerGets`) on the match; settlement and reversal always use the match's
+  own rate (`feeRateOf`; matches created before this have no `feeRate` and keep
+  20% = `LEGACY_FEE_RATE`). Old ledger lines are never edited. The app reads
+  `config/fees` (`useFeeRate`) for tiles, Create and Wallet; a match page shows the
+  match's own rate. The beta rules text says 10%: change it (new version) if the
+  rate changes.
+- **Winner takes all:** the winner gets everything left after the fee. Nobody
   else in the match gets credits back. On a tie (squads) the tied winners share
   it equally in cents (`splitWinnings`; leftover cents go to the first tied
-  players in join order, so 6.40 / 3 = 2.14 + 2.13 + 2.13).
+  players in join order, e.g. 6.40 / 3 = 2.14 + 2.13 + 2.13).
 - A player can play **at most 10 matches per day**.
 - **No credits move until a match is validated**: either approved automatically by
   the photo check (only when `config/review.autoApprove` is on and every condition
@@ -118,6 +126,8 @@ Players must be **18+** and in **Spain**.
   existed. Not run by `deploy.sh`. `./top-up.sh` previews, `./top-up.sh --apply` grants. Safe to re-run
   (uses the same idempotent `grantStarterCredits`).
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
+- `.github/workflows/maintenance.yml` – one-off data jobs run by hand, preview unless
+  "apply" is ticked: `migrate-platforms`, `rebuild-stats`. Prints counts only.
 - `BACKLOG.md` – agreed ideas not built yet (native iOS app, Clash Royale battle log).
 - `.github/workflows/inspect-log.yml` – read-only, run by hand (function name + time
   window): describes WARNING+ log entries WITHOUT printing their text, and says
@@ -132,11 +142,15 @@ Players must be **18+** and in **Spain**.
 
 - Email and password sign-in (Firebase Auth). Users stay signed in.
 - The tabs are only reachable when signed in (`Stack.Protected` in `src/app/_layout.tsx`).
-- `users/{uid}` holds: `gamerTag`, `platform` (`pc`, `playstation`, `xbox`, `mobile`),
+- `users/{uid}` holds: `gamerTag`, `platforms` (a list of 1–5 of `pc`, `playstation`,
+  `xbox`, `switch`, `mobile`; multi-select chips at sign-up and in Profile; older
+  profiles had a single `platform`, moved by the Maintenance job `migrate-platforms`;
+  read with `platformsOf()`),
   `ageConfirmed: true`, `ageConfirmedAt`, `country: "ES"` (self-declared), `gameIds`
   (`eaId`, `activisionId`, `epicName`, `clashRoyaleTag`), `createdAt`.
 - **Never put credits or reputation in `users/{uid}`**: they are server-only.
-- The app may only change `gamerTag` and `gameIds` after sign-up.
+- The app may only change `gamerTag`, `gameIds` and `platforms` after sign-up (and
+  remove the old `platform` field).
 - Gamer tag: 3–20 letters, numbers or underscores. Password: at least 8 characters.
 
 ## Beta rules acceptance
@@ -152,10 +166,12 @@ Players must be **18+** and in **Spain**.
   for existing players, once at next login; checkbox "I am 18+ and accept the beta
   rules"). Read-only `src/app/beta-rules.tsx`, linked from Profile and Sign up.
 - `createMatch` / `joinMatch` refuse players who haven't accepted the current version.
-- Current version: **v4**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
-  (the game rules above), 4 Fair play, 5 Review (checked automatically; unclear
-  checks and disputes go to an admin, whose decision is final), 6 Beta, 7 Your data
-  (screenshots are checked by an AI system (Anthropic); any player can dispute).
+- Current version: **v5**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
+  (the game rules above; 10% fee, winner 90%), 4 Fair play, 5 Review (checked
+  automatically; unclear checks and disputes go to an admin, whose decision is
+  final), 6 Beta, 7 Your data (controller "Betterplayer (Better.player.one@gmail.com)";
+  stats visible to other players; screenshots checked by an AI system (Anthropic);
+  any player can dispute).
 
 ## Credits data
 
@@ -235,6 +251,10 @@ Players must be **18+** and in **Spain**.
   never overwritten or deleted (`resource == null` on create). Players of the match
   and admins can read. Functions check the file exists, is in the caller's folder,
   was uploaded inside the match window, and isn't a (near-)duplicate.
+- Score boxes: "Next" (`enterKeyHint`) moves to the following box and "Done" on the
+  last; on iOS native an `InputAccessoryView` bar adds Next/Done above the number
+  pad (the iPhone number pad has no return key). Clash Royale crowns jump to the
+  next box after one digit; goals, eliminations and damage don't.
 - The app opens the **camera only** (`src/matches/upload.ts` `takePhoto`): on the web a
   file input with `accept="image/*" capture="environment"`; native uses the system
   camera for now (expo-camera later). `src/components/ResultScreenExample.tsx` shows
@@ -253,6 +273,27 @@ Players must be **18+** and in **Spain**.
 - Reputation `reputation/{uid}` {points, matchesCompleted, disputesLost}, server-only,
   owner-readable: +1 per completed match; −5 (and disputesLost +1) when your report
   is overridden or your dispute is rejected. Cancel & refund changes nothing.
+
+## Player stats
+
+- Phase 1 (built): stats per game from our own settled matches. `playerStats/{uid}`
+  = { gamerTag, games: { [gameId]: { played, wins, losses, draws, creditsWon, streak,
+  elo, lastMatchId } } }; readable by any signed-in player, written only by functions.
+  Logic in `functions/src/shared/stats.ts` (import-free, used by functions and app).
+- Updated in the SAME transaction as settlement (`writeSettlement`) for every settled
+  match except cancel & refund (a draw counts as played + draw). What each match did
+  is kept in `statsEntries/{matchId}` (server-only) so `reverseAutoDecision` can take
+  it out and count the corrected result (cancel → not counted).
+- Skill rating = Elo, start 1000, K = 32, from ratings before the match. Each winner
+  beats each non-winner (squads: the winner beats every other player); tied winners
+  draw each other; non-winners don't play each other; a draw = draw between all.
+- Streak: +n wins in a row, −n losses in a row, 0 after a draw. Credits won = winnings
+  received (not refunds). Win rate = wins / played.
+- App: Stats card in Profile → "See all stats" (`src/app/stats.tsx`, `/stats?uid=…`);
+  tap a player's name in the match room to see their stats. No tab.
+- Maintenance job `rebuild-stats` rebuilds all stats from settled matches
+  (`functions/src/maintenance.ts`).
+- Phase 2 (external game stats) is planned in `BACKLOG.md`, not built.
 
 ## Automatic result check (Claude vision)
 

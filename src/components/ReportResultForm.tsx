@@ -1,5 +1,14 @@
-import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  InputAccessoryView,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { NOTES_MAX, checkResult, describeOutcome, type ResultDetails } from '@shared/games';
 
@@ -18,6 +27,8 @@ import { uploadResultImage, type PickedImage } from '@/matches/upload';
 
 type Scores = Record<string, string>; // uid -> text typed
 
+const SCORE_KEYS = 'score-keys'; // iOS keyboard bar with Next / Done
+
 const toNumbers = (s: Scores, uids: string[]) =>
   Object.fromEntries(uids.map((u) => [u, s[u] === undefined || s[u] === '' ? NaN : Number(s[u])]));
 
@@ -34,6 +45,9 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  // Score boxes in screen order, so "Next" can move to the following one.
+  const inputs = useRef<Record<string, TextInput | null>>({});
+  const [focused, setFocused] = useState<string | null>(null);
   if (!game) return null;
 
   const kind = game.resultKind;
@@ -77,7 +91,22 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
     }
   }
 
-  const scoreRow = (label: string, values: Scores, set: (s: Scores) => void, max = 3) => (
+  const sections = ['main', ...(level ? ['pens'] : []), ...(kind === 'eliminations' ? ['dmg'] : [])];
+  const order = sections.flatMap((sec) => uids.map((u) => `${sec}:${u}`));
+  const isLast = (key: string | null) => !!key && order.indexOf(key) === order.length - 1;
+  function focusNext(key: string) {
+    const next = order[order.indexOf(key) + 1];
+    if (next) inputs.current[next]?.focus();
+    else Keyboard.dismiss();
+  }
+
+  const scoreRow = (
+    section: string,
+    label: string,
+    values: Scores,
+    set: (s: Scores) => void,
+    max = 3,
+  ) => (
     <View style={styles.scores}>
       <Text style={styles.label}>{label}</Text>
       {match.players.map((p) => (
@@ -87,9 +116,27 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
             {p.uid === uid ? ' (you)' : ''}
           </Text>
           <TextInput
+            ref={(r) => {
+              inputs.current[`${section}:${p.uid}`] = r;
+            }}
             accessibilityLabel={`${label} for ${p.gamerTag}`}
             value={values[p.uid] ?? ''}
-            onChangeText={(v) => set({ ...values, [p.uid]: v.replace(/[^0-9]/g, '') })}
+            onChangeText={(v) => {
+              const digits = v.replace(/[^0-9]/g, '');
+              set({ ...values, [p.uid]: digits });
+              // Crowns are always one digit (0–3): go straight to the next box.
+              // Goals, eliminations and damage can have 2+ digits, so they wait.
+              if (kind === 'crowns' && section === 'main' && digits.length === 1) {
+                focusNext(`${section}:${p.uid}`);
+              }
+            }}
+            onFocus={() => setFocused(`${section}:${p.uid}`)}
+            onBlur={() => setFocused((f) => (f === `${section}:${p.uid}` ? null : f))}
+            // "Next" moves to the following box, "Done" on the last one.
+            enterKeyHint={isLast(`${section}:${p.uid}`) ? 'done' : 'next'}
+            submitBehavior={isLast(`${section}:${p.uid}`) ? 'blurAndSubmit' : 'submit'}
+            onSubmitEditing={() => focusNext(`${section}:${p.uid}`)}
+            inputAccessoryViewID={Platform.OS === 'ios' ? SCORE_KEYS : undefined}
             keyboardType="number-pad"
             maxLength={max}
             placeholder="0"
@@ -117,9 +164,22 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
           onChange={setWinner}
         />
       )}
-      {scoreRow(fieldLabel, main, setMain)}
-      {level && scoreRow('Penalty shoot-out', pens, setPens)}
-      {kind === 'eliminations' && scoreRow('Damage', dmg, setDmg, 6)}
+      {scoreRow('main', fieldLabel, main, setMain)}
+      {level && scoreRow('pens', 'Penalty shoot-out', pens, setPens)}
+      {kind === 'eliminations' && scoreRow('dmg', 'Damage', dmg, setDmg, 6)}
+      {Platform.OS === 'ios' && (
+        // The iPhone number pad has no return key: add a Next / Done bar above it.
+        <InputAccessoryView nativeID={SCORE_KEYS}>
+          <View style={styles.keyBar}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => (focused ? focusNext(focused) : Keyboard.dismiss())}
+              style={styles.keyButton}>
+              <Text style={styles.keyText}>{isLast(focused) || !focused ? 'Done' : 'Next'}</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      )}
       {preview && 'winners' in preview && (
         <Text style={styles.outcome}>
           Result: {describeOutcome(preview.winners, match.players)}
@@ -169,6 +229,24 @@ const styles = StyleSheet.create({
   },
   scores: {
     gap: 8,
+  },
+  keyBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  keyButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  keyText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 16,
+    color: colors.accent,
   },
   outcome: {
     fontFamily: fonts.bodySemiBold,

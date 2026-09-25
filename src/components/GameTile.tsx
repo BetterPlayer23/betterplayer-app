@@ -1,7 +1,10 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { percent } from '@shared/games';
+
 import type { Game } from '@/constants/games';
 import { colors, fonts } from '@/constants/theme';
+import { useFeeRate } from '@/matches/useFeeRate';
 
 // A game shown as its name on a coloured tile. No publisher logos or artwork.
 // Pass onPress to make it selectable.
@@ -14,6 +17,7 @@ export function GameTile({
   selected?: boolean;
   onPress?: () => void;
 }) {
+  const feeRate = useFeeRate();
   const content = (
     <>
       <Text style={[styles.name, { color: game.color }]} numberOfLines={2}>
@@ -22,6 +26,7 @@ export function GameTile({
       <Text style={styles.players} numberOfLines={3}>
         {game.tile}
       </Text>
+      <Text style={styles.fee}>Winner gets {percent(1 - feeRate)} of the pot</Text>
     </>
   );
   const tileStyle = [
@@ -44,6 +49,12 @@ export function GameTile({
 }
 
 const styles = StyleSheet.create({
+  fee: {
+    fontFamily: fonts.body,
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
   tile: {
     flexBasis: '47%',
     flexGrow: 1,

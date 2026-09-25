@@ -26,6 +26,7 @@ export type Match = {
   pot: number;
   fee: number;
   winnerGets: number;
+  feeRate?: number; // fixed when the match was created (older matches: none = 20%)
   createdAt: Timestamp | null;
   expiresAt: Timestamp | null;
   startedAt?: Timestamp;
@@ -37,7 +38,7 @@ export type Match = {
   disputed?: boolean;
   reviewAt?: Timestamp;
   winnerUid?: string; // single winner (absent on a tie or draw)
-  winnerUids?: string[]; // 2+ = tie (the 80% is shared), none = draw
+  winnerUids?: string[]; // 2+ = tie (the winnings are shared), none = draw
   draw?: boolean; // Clash Royale draw: every entry refunded
   decision?: 'approve' | 'override' | 'cancel_refund';
   settledAt?: Timestamp;

@@ -1,23 +1,32 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { FEE_RATE, matchMoney, type ResultKind } from '@shared/games';
+import { matchMoney, percent, type ResultKind } from '@shared/games';
 
 import { colors, fonts } from '@/constants/theme';
 import { formatCredits } from '@/wallet/format';
 
-// Entry, pot, 20% fee and what the winner gets, for a number of players.
+// Entry, pot, fee and what the winner gets, for a number of players and a fee
+// rate (a new match: the live rate; an existing match: its own stored rate).
 // What happens on a level result depends on the game.
 const LEVEL_NOTE: Partial<Record<ResultKind, string>> = {
   eliminations: 'Split equally between the winners on a tie.',
   crowns: 'A draw is refunded.',
 };
 
-export function MoneySummary({ players, kind }: { players: number; kind?: ResultKind }) {
-  const m = matchMoney(players);
+export function MoneySummary({
+  players,
+  kind,
+  feeRate,
+}: {
+  players: number;
+  kind?: ResultKind;
+  feeRate: number;
+}) {
+  const m = matchMoney(players, feeRate);
   const rows: [string, string][] = [
     ['Entry', `${formatCredits(m.entry)} credits per player`],
     ['Pot', `${formatCredits(m.pot)} credits (${players} players)`],
-    [`Fee (${Math.round(FEE_RATE * 100)}%)`, `${formatCredits(m.fee)} credits`],
+    [`Fee (${percent(feeRate)})`, `${formatCredits(m.fee)} credits`],
   ];
   return (
     <View style={styles.box}>
@@ -28,7 +37,7 @@ export function MoneySummary({ players, kind }: { players: number; kind?: Result
         </View>
       ))}
       <View style={[styles.row, styles.total]}>
-        <Text style={styles.totalLabel}>Winner gets</Text>
+        <Text style={styles.totalLabel}>Winner gets ({percent(1 - feeRate)})</Text>
         <Text style={styles.totalValue}>{formatCredits(m.winnerGets)} credits</Text>
       </View>
       {kind && LEVEL_NOTE[kind] && <Text style={styles.label}>{LEVEL_NOTE[kind]}</Text>}

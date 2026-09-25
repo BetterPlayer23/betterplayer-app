@@ -116,6 +116,17 @@ function RootNavigator() {
             ),
           }}
         />
+        <Stack.Screen
+          name="stats"
+          options={{
+            headerShown: true,
+            header: ({ navigation }) => (
+              <AppHeader
+                onBack={() => (navigation.canGoBack() ? navigation.goBack() : router.replace('/'))}
+              />
+            ),
+          }}
+        />
       </Stack.Protected>
       <Stack.Protected guard={status === 'needsProfile'}>
         <Stack.Screen

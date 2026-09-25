@@ -4,19 +4,35 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { friendlyError } from '@/auth/errors';
-import { gameIdFields, platformLabel, type GameIdKey, type GameIds } from '@/auth/profile';
-import { checkGamerTag, checkGameId, normalizeGameId, GAME_ID_MAX } from '@/auth/validation';
+import {
+  gameIdFields,
+  platforms as platformOptions,
+  platformsOf,
+  type GameIdKey,
+  type GameIds,
+  type PlatformId,
+} from '@/auth/profile';
+import {
+  checkGamerTag,
+  checkGameId,
+  checkPlatforms,
+  normalizeGameId,
+  GAME_ID_MAX,
+} from '@/auth/validation';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { FormMessage } from '@/components/FormMessage';
+import { MultiChipSelect } from '@/components/MultiChipSelect';
 import { Screen, SectionTitle } from '@/components/Screen';
+import { StatsCard } from '@/components/StatsCard';
 import { TextField } from '@/components/TextField';
 import { colors, fonts } from '@/constants/theme';
 
 type Message = { kind: 'error' | 'success'; text: string } | null;
 
 export default function ProfileScreen() {
-  const { profile, user, isAdmin, updateGamerTag, updateGameIds, logOut } = useAuth();
+  const { profile, user, isAdmin, updateGamerTag, updateGameIds, updatePlatforms, logOut } =
+    useAuth();
 
   // Gamer tag editing
   const [editingTag, setEditingTag] = useState(false);
@@ -30,6 +46,13 @@ export default function ProfileScreen() {
   const [idErrors, setIdErrors] = useState<Partial<Record<GameIdKey, string | null>>>({});
   const [idsMessage, setIdsMessage] = useState<Message>(null);
   const [savingIds, setSavingIds] = useState(false);
+
+  // Platforms
+  const savedPlatforms = profile ? platformsOf(profile) : [];
+  const [plats, setPlats] = useState<PlatformId[]>(savedPlatforms);
+  const [platsMessage, setPlatsMessage] = useState<Message>(null);
+  const [savingPlats, setSavingPlats] = useState(false);
+  const platsChanged = plats.join() !== savedPlatforms.join();
 
   // Keep the form in step with the saved profile when not editing.
   useEffect(() => {
@@ -52,6 +75,21 @@ export default function ProfileScreen() {
       setTagMessage({ kind: 'error', text: friendlyError(e) });
     } finally {
       setSavingTag(false);
+    }
+  }
+
+  async function savePlatforms() {
+    const err = checkPlatforms(plats);
+    setPlatsMessage(err ? { kind: 'error', text: err } : null);
+    if (err) return;
+    setSavingPlats(true);
+    try {
+      await updatePlatforms(plats);
+      setPlatsMessage({ kind: 'success', text: 'Platforms saved.' });
+    } catch (e) {
+      setPlatsMessage({ kind: 'error', text: friendlyError(e) });
+    } finally {
+      setSavingPlats(false);
     }
   }
 
@@ -120,8 +158,28 @@ export default function ProfileScreen() {
           </View>
         )}
         {tagMessage && <FormMessage kind={tagMessage.kind} text={tagMessage.text} />}
-        <Info label="Primary platform" value={platformLabel(profile.platform)} />
         <Info label="Email" value={user.email ?? '—'} />
+      </Card>
+
+      <SectionTitle>Stats</SectionTitle>
+      <StatsCard uid={user.uid} />
+
+      <SectionTitle>Platforms</SectionTitle>
+      <Card style={styles.card}>
+        <MultiChipSelect
+          label="Platforms you play on"
+          hint="Pick all that apply (at least one)."
+          options={platformOptions}
+          value={plats}
+          onChange={(v) => {
+            setPlats(v);
+            setPlatsMessage(null);
+          }}
+        />
+        {platsMessage && <FormMessage kind={platsMessage.kind} text={platsMessage.text} />}
+        {(platsChanged || !profile.platforms) && (
+          <Button label="Save platforms" onPress={savePlatforms} loading={savingPlats} />
+        )}
       </Card>
 
       <SectionTitle>Game IDs</SectionTitle>

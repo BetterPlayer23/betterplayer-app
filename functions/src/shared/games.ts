@@ -101,7 +101,24 @@ export function getGame(id: string): GameConfig | undefined {
 }
 
 export const ENTRY_CREDITS = 2;
-export const FEE_RATE = 0.2;
+// Betterplayer's fee as a share of the whole pot. The live rate is read from
+// Firestore config/fees.rate (server) and stored on each match when it's
+// created, so a match always settles at the rate it was created with.
+export const DEFAULT_FEE_RATE = 0.1; // used when config/fees is missing
+export const LEGACY_FEE_RATE = 0.2; // matches created before the rate was stored
+
+// A usable fee rate from config/fees, or the default.
+export function readFeeRate(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n < 1 ? n : DEFAULT_FEE_RATE;
+}
+
+// The rate a match settles at: its own stored rate (older matches: 20%).
+export const feeRateOf = (match: { feeRate?: number | null }) =>
+  typeof match.feeRate === 'number' ? match.feeRate : LEGACY_FEE_RATE;
+
+// "10%" for a rate of 0.1.
+export const percent = (rate: number) => `${Math.round(rate * 1000) / 10}%`;
 export const DAILY_MATCH_LIMIT = 10; // matches created or joined per day (Europe/Madrid)
 export const OPEN_MATCH_MINUTES = 15; // open matches are cancelled after this
 export const LOBBY_CODE_MAX = 20;
@@ -118,22 +135,26 @@ export type MatchStatus =
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
-// Pot = entry x players; fee 20% of the pot; the winner gets the rest.
-export function matchMoney(players: number) {
+// Pot = entry x players; the fee is a share of the pot; the winner gets the rest.
+export function matchMoney(players: number, feeRate: number = DEFAULT_FEE_RATE) {
   const pot = round2(ENTRY_CREDITS * players);
-  const fee = round2(pot * FEE_RATE);
+  const fee = round2(pot * feeRate);
   return { entry: ENTRY_CREDITS, pot, fee, winnerGets: round2(pot - fee) };
 }
 
 /**
  * How the winners' 80% is shared: equally, in whole cents. Leftover cents
- * (e.g. 6.40 split 3 ways = 2.14 + 2.13 + 2.13) go to the first winners in
+ * (e.g. 7.20 split 3 ways = 2.40 each; 3.60 split 3 ways = 1.20 each; 6.40 split 3 ways = 2.14 + 2.13 + 2.13) go to the first winners in
  * the order given (join order), so the total is always exact.
  */
-export function splitWinnings(players: number, winnerUids: string[]): Record<string, number> {
+export function splitWinnings(
+  players: number,
+  winnerUids: string[],
+  feeRate: number = DEFAULT_FEE_RATE,
+): Record<string, number> {
   const out: Record<string, number> = {};
   if (!winnerUids.length) return out;
-  const cents = Math.round(matchMoney(players).winnerGets * 100);
+  const cents = Math.round(matchMoney(players, feeRate).winnerGets * 100);
   const base = Math.floor(cents / winnerUids.length);
   const extra = cents - base * winnerUids.length;
   winnerUids.forEach((uid, i) => {

@@ -11,6 +11,7 @@ import { ChipSelect } from '@/components/ChipSelect';
 import { FormMessage } from '@/components/FormMessage';
 import { GameTile } from '@/components/GameTile';
 import { openMatchRoom } from '@/components/MatchCard';
+import { useFeeRate } from '@/matches/useFeeRate';
 import { MoneySummary } from '@/components/MoneySummary';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
@@ -22,6 +23,7 @@ import { useWallet } from '@/wallet/useWallet';
 export default function CreateScreen() {
   const { profile } = useAuth();
   const wallet = useWallet();
+  const feeRate = useFeeRate();
   const [game, setGame] = useState<Game | null>(null);
   const [players, setPlayers] = useState(2);
   const [title, setTitle] = useState('');
@@ -98,7 +100,7 @@ export default function CreateScreen() {
 
           <Card style={styles.card}>
             <Text style={styles.cardTitle}>Credits</Text>
-            <MoneySummary players={playerCount} kind={game?.resultKind} />
+            <MoneySummary players={playerCount} kind={game?.resultKind} feeRate={feeRate} />
           </Card>
 
           <TextField

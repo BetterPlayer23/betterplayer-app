@@ -3,21 +3,21 @@ import { useState } from 'react';
 import { AuthForm } from '@/components/AuthForm';
 import { Button } from '@/components/Button';
 import { Checkbox } from '@/components/Checkbox';
-import { ChipSelect } from '@/components/ChipSelect';
+import { MultiChipSelect } from '@/components/MultiChipSelect';
 import { FormMessage } from '@/components/FormMessage';
 import { TextField } from '@/components/TextField';
 import { TextLink } from '@/components/TextLink';
 import { useAuth } from '@/auth/AuthProvider';
 import { friendlyError } from '@/auth/errors';
-import { platforms, type PlatformId } from '@/auth/profile';
-import { checkAge, checkGamerTag, checkPlatform } from '@/auth/validation';
+import { platforms as platformOptions, type PlatformId } from '@/auth/profile';
+import { checkAge, checkGamerTag, checkPlatforms } from '@/auth/validation';
 
 // Shown when someone is signed in but their profile was never saved
 // (for example, the connection dropped during sign-up).
 export default function CompleteProfileScreen() {
   const { createProfile, logOut } = useAuth();
   const [gamerTag, setGamerTag] = useState('');
-  const [platform, setPlatform] = useState<PlatformId | null>(null);
+  const [platforms, setPlatforms] = useState<PlatformId[]>([]);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -26,16 +26,16 @@ export default function CompleteProfileScreen() {
   async function submit() {
     const next = {
       gamerTag: checkGamerTag(gamerTag),
-      platform: checkPlatform(platform),
+      platform: checkPlatforms(platforms),
       age: checkAge(ageConfirmed),
     };
     setErrors(next);
     setFormError(null);
-    if (Object.values(next).some(Boolean) || !platform) return;
+    if (Object.values(next).some(Boolean) ) return;
 
     setBusy(true);
     try {
-      await createProfile(gamerTag, platform);
+      await createProfile(gamerTag, platforms);
     } catch (e) {
       setFormError(friendlyError(e));
       setBusy(false);
@@ -55,11 +55,12 @@ export default function CompleteProfileScreen() {
         hint="Visible to other players. 3–20 letters, numbers or _."
         maxLength={20}
       />
-      <ChipSelect
-        label="Primary platform"
-        options={platforms}
-        value={platform}
-        onChange={setPlatform}
+      <MultiChipSelect
+        label="Platforms you play on"
+        hint="Pick all that apply."
+        options={platformOptions}
+        value={platforms}
+        onChange={setPlatforms}
         error={errors.platform}
       />
       <Checkbox

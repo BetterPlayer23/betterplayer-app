@@ -5,19 +5,19 @@ import { StyleSheet, Text } from 'react-native';
 import { AuthForm } from '@/components/AuthForm';
 import { Button } from '@/components/Button';
 import { Checkbox } from '@/components/Checkbox';
-import { ChipSelect } from '@/components/ChipSelect';
+import { MultiChipSelect } from '@/components/MultiChipSelect';
 import { FormMessage } from '@/components/FormMessage';
 import { TextField } from '@/components/TextField';
 import { TextLink } from '@/components/TextLink';
 import { useAuth } from '@/auth/AuthProvider';
 import { friendlyError } from '@/auth/errors';
-import { platforms, type PlatformId } from '@/auth/profile';
+import { platforms as platformOptions, type PlatformId } from '@/auth/profile';
 import {
   checkAge,
   checkEmail,
   checkGamerTag,
   checkPassword,
-  checkPlatform,
+  checkPlatforms,
 } from '@/auth/validation';
 import { colors, fonts } from '@/constants/theme';
 
@@ -28,7 +28,7 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [gamerTag, setGamerTag] = useState('');
-  const [platform, setPlatform] = useState<PlatformId | null>(null);
+  const [platforms, setPlatforms] = useState<PlatformId[]>([]);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -39,16 +39,16 @@ export default function SignUpScreen() {
       email: checkEmail(email) ?? undefined,
       password: checkPassword(password) ?? undefined,
       gamerTag: checkGamerTag(gamerTag) ?? undefined,
-      platform: checkPlatform(platform) ?? undefined,
+      platform: checkPlatforms(platforms) ?? undefined,
       age: checkAge(ageConfirmed) ?? undefined,
     };
     setErrors(next);
     setFormError(null);
-    if (Object.values(next).some(Boolean) || !platform) return;
+    if (Object.values(next).some(Boolean) ) return;
 
     setBusy(true);
     try {
-      await signUp({ email, password, gamerTag, platform });
+      await signUp({ email, password, gamerTag, platforms });
       // Signed in: the app switches to the tabs by itself.
     } catch (e) {
       setFormError(friendlyError(e));
@@ -96,11 +96,12 @@ export default function SignUpScreen() {
         autoComplete="username"
         textContentType="username"
       />
-      <ChipSelect
-        label="Primary platform"
-        options={platforms}
-        value={platform}
-        onChange={setPlatform}
+      <MultiChipSelect
+        label="Platforms you play on"
+        hint="Pick all that apply."
+        options={platformOptions}
+        value={platforms}
+        onChange={setPlatforms}
         error={errors.platform}
       />
       <Checkbox

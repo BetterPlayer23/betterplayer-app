@@ -1,17 +1,21 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
+import { ENTRY_CREDITS, percent } from '@shared/games';
+
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { FormMessage } from '@/components/FormMessage';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { StatCard } from '@/components/StatCard';
 import { colors, fonts } from '@/constants/theme';
+import { useFeeRate } from '@/matches/useFeeRate';
 import { formatCredits, formatDate, historyAmount, isLock, ledgerLabel } from '@/wallet/format';
 import { useLedger, useWallet, type LedgerEntry } from '@/wallet/useWallet';
 
 export default function WalletScreen() {
   const wallet = useWallet();
   const ledger = useLedger();
+  const feeRate = useFeeRate();
 
   return (
     <Screen>
@@ -29,6 +33,8 @@ export default function WalletScreen() {
       </View>
       <Text style={styles.note}>
         Beta Credits have no cash value. Locked credits are held for matches in progress.
+        Each player enters {ENTRY_CREDITS} credits; Betterplayer keeps {percent(feeRate)} of the
+        pot and the winner gets {percent(1 - feeRate)} (shared equally on a tie).
       </Text>
       {wallet.error && <FormMessage kind="error" text={wallet.error} />}
 

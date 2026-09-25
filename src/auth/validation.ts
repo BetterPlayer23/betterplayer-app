@@ -22,8 +22,8 @@ export function checkGamerTag(tag: string): string | null {
   return null;
 }
 
-export function checkPlatform(platform: string | null): string | null {
-  return platform ? null : 'Choose your main platform.';
+export function checkPlatforms(platforms: string[]): string | null {
+  return platforms.length ? null : 'Choose at least one platform.';
 }
 
 export function checkAge(confirmed: boolean): string | null {

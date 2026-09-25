@@ -42,6 +42,7 @@ export type MatchDoc = {
   pot: number;
   fee: number;
   winnerGets: number;
+  feeRate?: number; // fee share of the pot, fixed at creation (older matches: none = 20%)
   createdAt: Timestamp;
   updatedAt: Timestamp;
   expiresAt: Timestamp;
@@ -72,7 +73,7 @@ export type ReportDoc = {
   uid: string;
   gamerTag: string;
   winnerUid: string | null; // the single winner (null on a tie or draw)
-  winnerUids?: string[]; // all winners: 2+ = tie (the 80% is split), none = draw (refund)
+  winnerUids?: string[]; // all winners: 2+ = tie (the winnings are split), none = draw (refund)
   winnerGamerTag: string | null;
   draw?: boolean;
   details: Record<string, unknown>;

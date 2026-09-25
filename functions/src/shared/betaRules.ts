@@ -3,9 +3,9 @@
 // To change the rules: edit the text AND bump BETA_RULES_VERSION, so every
 // player is asked to accept the new version once.
 
-export const BETA_RULES_VERSION = 'v4';
+export const BETA_RULES_VERSION = 'v5';
 
-export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v4)';
+export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v5)';
 
 export const BETA_RULES_CONTACT_EMAIL = 'Better.player.one@gmail.com';
 
@@ -20,7 +20,7 @@ export const BETA_RULES: readonly { title: string; text: string }[] = [
   },
   {
     title: 'Games and winners',
-    text: 'Every player enters 2 credits. Betterplayer keeps 20% of the pot and the winner gets the other 80%; on a tie it is split equally. EA FC: 1v1, a draw is decided on penalties. Fortnite and Warzone: 2 to 4 Betterplayer players in the same squad; the most eliminations wins, a tie on eliminations goes to the most damage, and players still tied share the credits. Clash Royale: 1v1 Friendly Battle between friends; the most crowns wins and a draw is refunded.',
+    text: 'Every player enters 2 credits. Betterplayer keeps a 10% fee from the pot and the winner gets the other 90%; on a tie it is split equally. EA FC: 1v1, a draw is decided on penalties. Fortnite and Warzone: 2 to 4 Betterplayer players in the same squad; the most eliminations wins, a tie on eliminations goes to the most damage, and players still tied share the credits. Clash Royale: 1v1 Friendly Battle between friends; the most crowns wins and a draw is refunded.',
   },
   {
     title: 'Fair play',
@@ -36,7 +36,7 @@ export const BETA_RULES: readonly { title: string; text: string }[] = [
   },
   {
     title: 'Your data',
-    text: 'Frantz Benois (Better.player.one@gmail.com) stores your email, gamer tag, game IDs, match history and result screenshots only to run this beta, on Google Firebase. Nothing is sold or used for advertising. Data is deleted when the beta ends or on request. Email us to access, correct or delete your data; you can also complain to the AEPD (aepd.es). Result screenshots are checked automatically by an AI system (Anthropic) to confirm scores. Any player can dispute a result and a Betterplayer admin will review it.',
+    text: 'Betterplayer (Better.player.one@gmail.com) stores your email, gamer tag, game IDs, match history and result screenshots only to run this beta, on Google Firebase. Your gamer tag and match stats (matches played, wins, skill rating) are visible to other beta players. Nothing is sold or used for advertising. Data is deleted when the beta ends or on request. Email us to access, correct or delete your data; you can also complain to the AEPD (aepd.es). Result screenshots are checked automatically by an AI system (Anthropic) to confirm scores. Any player can dispute a result and a Betterplayer admin will review it.',
   },
 ];
 

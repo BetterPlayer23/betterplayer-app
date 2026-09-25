@@ -9,6 +9,7 @@ import {
   TITLE_MAX,
   getGame,
   matchMoney,
+  readFeeRate,
 } from '../shared/games';
 import {
   checkEligible,
@@ -57,7 +58,7 @@ export async function createMatch(db: Firestore, uid: string, data: Data, now = 
   }
 
   const ref = db.collection('matches').doc();
-  const money = matchMoney(maxPlayers);
+  const feesRef = db.collection('config').doc('fees');
 
   // A share code is reserved in matchCodes/{code} so it's never reused.
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -66,6 +67,9 @@ export async function createMatch(db: Firestore, uid: string, data: Data, now = 
     const created = await db.runTransaction(async (tx) => {
       const player = await checkEligible(tx, db, uid, game, now);
       if ((await tx.get(codeRef)).exists) return false; // taken: try another code
+      // The fee rate is fixed now for this match (config/fees.rate, default 10%).
+      const feeRate = readFeeRate((await tx.get(feesRef)).get('rate'));
+      const money = matchMoney(maxPlayers, feeRate);
 
       const nowTs = Timestamp.fromDate(now);
       const host: MatchPlayer = {
@@ -90,6 +94,7 @@ export async function createMatch(db: Firestore, uid: string, data: Data, now = 
         pot: money.pot,
         fee: money.fee,
         winnerGets: money.winnerGets,
+        feeRate,
         createdAt: nowTs,
         updatedAt: nowTs,
         expiresAt: Timestamp.fromMillis(now.getTime() + OPEN_MATCH_MINUTES * 60_000),
