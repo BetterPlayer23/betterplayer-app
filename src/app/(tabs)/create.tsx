@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { ENTRY_CREDITS, TITLE_MAX } from '@shared/games';
+import { ENTRY_CREDITS, TITLE_MAX, formatWithRules } from '@shared/games';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
@@ -91,10 +91,11 @@ export default function CreateScreen() {
 
           <Card style={styles.card}>
             <Text style={styles.cardTitle}>Rules</Text>
-            <Text style={styles.format}>{game.tile}</Text>
+            <Text style={styles.format}>{formatWithRules(game, playerCount)}</Text>
             <Text style={styles.body}>{game.rules}</Text>
             <Text style={styles.body}>
-              A Betterplayer admin checks every result before any credits move.
+              Results are checked automatically. If the check is unclear or a player disputes, a
+              Betterplayer admin reviews the match.
             </Text>
           </Card>
 

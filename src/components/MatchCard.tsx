@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { matchFormat } from '@shared/games';
+
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -17,9 +19,10 @@ export function openMatchRoom(id: string) {
   router.push({ pathname: '/match', params: { id } });
 }
 
-const formatLabel = (m: Match) => (m.maxPlayers === 2 ? '1v1' : `${m.maxPlayers} players`);
+const formatLabel = (m: Match) => matchFormat(gameById(m.game), m.maxPlayers);
 
-// One match. `compact` (lists): game name, "1v1 · Host … · 1/2", status and a
+// One match. `compact` (lists): game name, "1v1 · Host … · 1/2" (squads:
+// "Squad · N players · …"), status and a
 // small Join / Open button. `active` (Home): pulsing dot, what the winner
 // gets, who you play against and "Open match room".
 export function MatchCard({ match, variant = 'compact' }: { match: Match; variant?: 'compact' | 'active' }) {

@@ -3,7 +3,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ENTRY_CREDITS, LOBBY_CODE_MAX, feeRateOf, splitWinnings, winnersOf } from '@shared/games';
+import {
+  ENTRY_CREDITS,
+  LOBBY_CODE_MAX,
+  feeRateOf,
+  formatWithRules,
+  splitWinnings,
+  winnersOf,
+} from '@shared/games';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
@@ -105,7 +112,7 @@ function Room({ match }: { match: Match }) {
       {match.title && <Text style={styles.title}>{match.title}</Text>}
 
       <Card style={styles.card}>
-        <Text style={styles.format}>{game?.tile}</Text>
+        <Text style={styles.format}>{game && formatWithRules(game, match.maxPlayers)}</Text>
         <Text style={styles.body}>{game?.rules}</Text>
       </Card>
 

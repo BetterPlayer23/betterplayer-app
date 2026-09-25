@@ -96,6 +96,19 @@ export const GAMES: readonly GameConfig[] = [
   },
 ];
 
+// How a match is described: "1v1" for 1v1 games, "Squad · 3 players" for
+// Fortnite / Warzone (never "1v1", even with 2 players).
+export function matchFormat(game: Pick<GameConfig, 'resultKind'> | undefined, players: number): string {
+  return game?.resultKind === 'eliminations' ? `Squad · ${players} players` : '1v1';
+}
+
+// The game's short rules line with the match's own format in front, e.g.
+// "Squad · 3 players · Most eliminations wins the pot".
+export function formatWithRules(game: Pick<GameConfig, 'resultKind' | 'tile'>, players: number): string {
+  const rest = game.tile.split(' · ').slice(1).join(' · ');
+  return rest ? `${matchFormat(game, players)} · ${rest}` : matchFormat(game, players);
+}
+
 export function getGame(id: string): GameConfig | undefined {
   return GAMES.find((g) => g.id === id);
 }
