@@ -16,6 +16,8 @@ import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '@/firebase';
 
 import type { GameIds, PlatformId, Profile } from './profile';
+
+type EmailResult = { sent: boolean; alreadyVerified?: boolean };
 import { markVerificationSent } from './verification';
 
 // loading:      still finding out who is signed in
@@ -137,6 +139,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   else if (profile.acceptedRulesVersion !== BETA_RULES_VERSION) status = 'needsRules';
   else status = 'signedIn';
 
+  // Our own verification email (link to the in-app page /auth/action), sent by
+  // a Cloud Function. If our email is switched off (no Gmail password yet),
+  // Firebase sends its own instead.
+  async function sendVerification() {
+    const current = auth.currentUser;
+    if (!current) throw new Error('Not signed in');
+    const { data } = await httpsCallable<Record<string, never>, EmailResult>(
+      functions,
+      'sendVerificationEmail',
+    )({});
+    if (data.alreadyVerified) return;
+    if (!data.sent) await sendEmailVerification(current);
+    markVerificationSent();
+  }
+
   async function createProfile(gamerTag: string, platforms: PlatformId[]) {
     const current = auth.currentUser;
     if (!current) throw new Error('Not signed in');
@@ -159,12 +176,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async signUp({ email, password, gamerTag, platforms }) {
       setCreating(true);
       try {
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
         await createProfile(gamerTag, platforms);
         // The verification link; the player can ask for it again on the next screen.
-        await sendEmailVerification(cred.user)
-          .then(() => markVerificationSent())
-          .catch(() => undefined);
+        await sendVerification().catch(() => undefined);
       } finally {
         setCreating(false);
       }
@@ -172,8 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async resendVerification() {
       const current = auth.currentUser;
       if (!current) throw new Error('Not signed in');
-      await sendEmailVerification(current);
-      markVerificationSent();
+      await sendVerification();
     },
     async checkVerified() {
       const current = auth.currentUser;
@@ -195,7 +209,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     },
     async resetPassword(email) {
-      await sendPasswordResetEmail(auth, email.trim());
+      // Our own email (link to the in-app page); Firebase's if ours is off.
+      const { data } = await httpsCallable<{ email: string }, EmailResult>(
+        functions,
+        'sendPasswordResetEmail',
+      )({ email: email.trim() });
+      if (!data.sent) await sendPasswordResetEmail(auth, email.trim());
     },
     async logOut() {
       await signOut(auth);

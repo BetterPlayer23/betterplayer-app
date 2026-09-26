@@ -13,6 +13,7 @@ import { sendReviewAlert } from './matches/alerts';
 import type { MatchDoc } from './matches/common';
 import * as results from './matches/results';
 import { requireUid, requireVerifiedEmail } from './matches/common';
+import * as authEmails from './authEmails';
 import { acceptRules as acceptRulesAction } from './rules';
 import { guardBackground, guardCallable, registerSecret } from './safeLog';
 import { grantStarterCredits } from './starterGrant';
@@ -119,6 +120,33 @@ export const acceptRules = callable(acceptRulesAction);
 // ---- Admin email alerts
 // The Gmail app password lives in Secret Manager (Firebase secret), never in code.
 const gmailAppPassword = defineSecret('GMAIL_APP_PASSWORD');
+
+// Our own verification and password-reset emails, linking to the in-app page
+// /auth/action (Firebase's email template can't be changed for this project).
+// Limited to 1 a minute and 5 an hour per player / per email address.
+export const sendVerificationEmail = onCall(
+  { secrets: [gmailAppPassword] },
+  async (request: CallableRequest<Record<string, unknown> | undefined>) => {
+    const uid = requireUid(request.auth);
+    const password = gmailAppPassword.value();
+    registerSecret(password);
+    return guardCallable('sendVerificationEmail', () =>
+      authEmails.sendVerificationEmail(getFirestore(), uid, password),
+    );
+  },
+);
+
+// "Forgot password?": no sign-in needed.
+export const sendPasswordResetEmail = onCall(
+  { secrets: [gmailAppPassword] },
+  async (request: CallableRequest<Record<string, unknown> | undefined>) => {
+    const password = gmailAppPassword.value();
+    registerSecret(password);
+    return guardCallable('sendPasswordResetEmail', () =>
+      authEmails.sendPasswordResetEmail(getFirestore(), request.data, password),
+    );
+  },
+);
 
 // When a match becomes under_review, email the admin (once per match).
 export const alertAdminOnReview = onDocumentUpdated(

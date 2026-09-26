@@ -3,7 +3,6 @@ import {
   applyActionCode,
   checkActionCode,
   confirmPasswordReset,
-  sendPasswordResetEmail,
   verifyPasswordResetCode,
 } from 'firebase/auth';
 import { useEffect, useRef, useState } from 'react';
@@ -225,13 +224,14 @@ function NewPasswordForm({ code, email, onDone }: { code: string; email: string;
 // The sign-in email was changed back. Suggest a new password in case someone
 // else changed it.
 function Recovered({ email }: { email: string }) {
+  const { resetPassword } = useAuth();
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   async function reset() {
     setBusy(true);
     setMessage(null);
     try {
-      await sendPasswordResetEmail(auth, email);
+      await resetPassword(email);
       setMessage({ kind: 'success', text: `We sent a password reset link to ${email}.` });
     } catch (e) {
       setMessage({ kind: 'error', text: friendlyError(e) });
@@ -254,7 +254,7 @@ function Recovered({ email }: { email: string }) {
 
 // Expired, already used or broken link: say so and offer a new one.
 function LinkError({ mode, text }: { mode: Mode | ''; text: string }) {
-  const { user, status, resendVerification } = useAuth();
+  const { user, status, resendVerification, resetPassword } = useAuth();
   const [email, setEmail] = useState(user?.email ?? '');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
@@ -296,7 +296,7 @@ function LinkError({ mode, text }: { mode: Mode | ''; text: string }) {
             setEmailError(err);
             if (!err) {
               send(
-                () => sendPasswordResetEmail(auth, email.trim()),
+                () => resetPassword(email),
                 'If an account uses this email, we’ve sent a new link. Check your inbox and spam folder.',
               );
             }

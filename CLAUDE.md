@@ -149,13 +149,10 @@ Players must be **18+** and in **Spain**.
   YES/NO whether they contain any of our secrets. Note: GitHub stars out every line
   of the `GCP_SA_KEY` secret, including lines that are just `{` or `}`, so an empty
   `{}` shows as `***` in Actions logs; that alone doesn't mean a secret leaked.
-- `.github/workflows/set-email-action-url.yml` – one-off, run by hand: sets the link in
-  Firebase's emails to `https://betterplayer23.github.io/betterplayer-app/auth/action`
-  through the Identity Toolkit Admin API (`projects.updateConfig`,
-  `notification.sendEmail.callbackUri`; the console failed to save it), adds the domain
-  to Authorized domains if missing, then reads both back. Prints only those values.
-  Needs `firebaseauth.configs.update` (Editor has it; otherwise add "Firebase
-  Authentication Admin" to `github-deploy`).
+- Workflows: every job runs on `ubuntu-24.04` (pinned, not `ubuntu-latest`) and uses
+  Node 24 actions: `actions/checkout@v6`, `actions/setup-node@v6`,
+  `google-github-actions/auth@v3`, `setup-gcloud@v3`, `upload-pages-artifact@v5`
+  (`include-hidden-files: true` keeps `.nojekyll`), `deploy-pages@v5`.
 - `.github/workflows/check-match.yml` – read-only, run by hand (two gamer tags): did the
   automatic check run on their latest match, what it returned, and warnings/errors in
   the `submitResult` logs. Prints no emails or in-game names (Actions logs may be public).
@@ -169,9 +166,24 @@ Players must be **18+** and in **Spain**.
   (`checkVerified`), and moves on by itself; "Resend email" has a 60 s cooldown
   (`useResendCooldown` in `src/auth/verification.ts`). Existing players see it once at
   their next login.
+- **Our own account emails** (`functions/src/authEmails.ts`, mail via `functions/src/mailer.ts`):
+  this project can't change Firebase's email template / action URL
+  (`EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`, console and API alike), so Firebase's own
+  emails always open Firebase's page. Instead the callables `sendVerificationEmail`
+  (signed in) and `sendPasswordResetEmail({ email })` (no sign-in) use the Admin SDK
+  `generateEmailVerificationLink` / `generatePasswordResetLink`, keep only the
+  `oobCode`, and email our link `https://betterplayer23.github.io/betterplayer-app/auth/action?mode=…&oobCode=…`
+  from "Betterplayer <Better.player.one@gmail.com>" (nodemailer, `GMAIL_APP_PASSWORD`),
+  short branded HTML + text in English. Limits: 1 a minute and 5 an hour per player
+  (verification) or per address (reset; stored as a SHA-256, never the address) in
+  `emailSends/{key}` (server-only). Reset answers the same for unknown addresses.
+  With the placeholder secret the functions return `{ sent: false }` and the app falls
+  back to Firebase's own email (`sendEmailVerification` / `sendPasswordResetEmail`).
+  The app uses them for sign-up, "Resend email", "Forgot password?" and the action
+  page's "Send a new link". In the emulator every email is saved in
+  `_emulator/mail_{to}` (nothing is sent).
 - **Email action links** (`src/app/auth/action.tsx`, `/auth/action?mode=…&oobCode=…`,
-  outside the sign-in gates): Firebase's emails link here once the action URL is set
-  (workflow `set-email-action-url`, or the console's "Customize action URL") to `https://betterplayer23.github.io/betterplayer-app/auth/action`.
+  outside the sign-in gates): our emails link here.
   `verifyEmail` applies the code and goes straight to Home (or the next gate) with a
   short "Email confirmed" message (`setFlash` / `useFlash`); signed out → "Log in".
   `resetPassword` shows a new-password form (`confirmPasswordReset`). `recoverEmail`

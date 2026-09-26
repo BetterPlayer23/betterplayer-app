@@ -1,7 +1,11 @@
+import { matchError } from '@/matches/api';
+
 // Turns Firebase error codes into plain messages for players.
 export function friendlyError(error: unknown): string {
   const code =
     typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+  // Our Cloud Functions already send plain messages (e.g. "Wait a minute…").
+  if (code.startsWith('functions/')) return matchError(error);
 
   switch (code) {
     case 'auth/email-already-in-use':

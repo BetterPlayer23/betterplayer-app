@@ -2,14 +2,14 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 
 import { REVIEW_REASON_LABELS, describeOutcome, describeResult, winnersOf } from '../shared/games';
+import { MAIL_FROM, SECRET_PLACEHOLDER, sendMail } from '../mailer';
 import { registerSecret } from '../safeLog';
 import type { DisputeDoc, MatchDoc, ReportDoc } from './common';
 
-export const ALERT_FROM = 'Better.player.one@gmail.com';
+export const ALERT_FROM = MAIL_FROM;
 export const ALERT_TO = 'frantzbenois+admin@gmail.com';
 export const APP_URL = 'https://betterplayer23.github.io/betterplayer-app/';
-// Value the deploy workflow stores when the real password hasn't been set yet.
-export const SECRET_PLACEHOLDER = 'not-set';
+export { SECRET_PLACEHOLDER };
 
 export type AlertEmail = { subject: string; text: string };
 
@@ -73,19 +73,7 @@ export async function sendReviewAlert(
   const dispute = disputes.docs[0]?.data() as DisputeDoc | undefined;
   const email = buildAlert(match, report, dispute);
 
-  // Loaded here, not at start-up, so the other functions don't pay for it.
-  const nodemailer = (await import('nodemailer')).default;
-  // In the emulator nothing is really sent: the message is only built.
-  const transport =
-    process.env.FUNCTIONS_EMULATOR === 'true'
-      ? nodemailer.createTransport({ jsonTransport: true })
-      : nodemailer.createTransport({
-          service: 'gmail',
-          auth: { user: ALERT_FROM, pass: password },
-          logger: false, // never log SMTP traffic (it includes the login)
-          debug: false,
-        });
-  await transport.sendMail({ from: `Betterplayer <${ALERT_FROM}>`, to: ALERT_TO, ...email });
+  await sendMail(db, { to: ALERT_TO, ...email }, password);
 
   await alertRef.set({
     matchId,
