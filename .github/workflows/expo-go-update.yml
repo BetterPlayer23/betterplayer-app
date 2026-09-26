@@ -1,0 +1,104 @@
+name: Publish to Expo Go
+
+# Publishes the app as an EAS Update (branch "expo-go") so it can be opened in
+# the Expo Go app on a phone, without a computer or an Apple Developer account.
+# Runs by hand (Actions → "Publish to Expo Go" → Run workflow) and on every
+# push to main that changes the app. The run's summary page shows the QR code
+# and the link to open this version in Expo Go.
+# Needs the repository secret EXPO_TOKEN (expo.dev → Account settings →
+# Access tokens), from the Expo account that owns the project (owner in app.json).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'functions/src/shared/**'
+      - 'app.json'
+      - 'eas.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/expo-go-update.yml'
+
+permissions:
+  contents: read
+
+# One publish at a time; a newer push replaces a queued one.
+concurrency:
+  group: expo-go-update
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: b2481696-ad1d-46ee-b764-706a243d38cd
+  OWNER: betterplayer
+  SLUG: betterplayer
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check for EXPO_TOKEN
+        id: token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "::error::Add the repository secret EXPO_TOKEN first (expo.dev → Account settings → Access tokens → Create token; then GitHub → Settings → Secrets and variables → Actions → New repository secret)."
+              exit 1
+            fi
+            echo "::notice::Skipped: no EXPO_TOKEN secret yet."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v6
+        if: steps.token.outputs.skip != 'true'
+
+      - uses: actions/setup-node@v6
+        if: steps.token.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        if: steps.token.outputs.skip != 'true'
+        run: npm ci
+
+      # Every native package must match the SDK version Expo Go runs.
+      - name: Check package versions for this Expo SDK
+        if: steps.token.outputs.skip != 'true'
+        run: npx expo install --check
+
+      - name: Publish the update
+        if: steps.token.outputs.skip != 'true'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          MESSAGE: ${{ github.event.head_commit.message || 'Published by hand' }}
+        run: |
+          set -euo pipefail
+          FIRST_LINE=$(printf '%s' "$MESSAGE" | head -n 1 | cut -c1-120)
+          npx --yes eas-cli@latest update \
+            --branch expo-go \
+            --message "$FIRST_LINE" \
+            --environment preview \
+            --non-interactive \
+            --json > update.json
+          GROUP=$(jq -r '.[0].group' update.json)
+          RUNTIME=$(jq -r '.[0].runtimeVersion' update.json)
+          QR="https://qr.expo.dev/eas-update?projectId=$PROJECT_ID&groupId=$GROUP"
+          LINK=$(curl -fsS "$QR&format=url" || echo "")
+          PAGE="https://expo.dev/accounts/$OWNER/projects/$SLUG/updates/$GROUP"
+          {
+            echo "## Open BetterPlayer in Expo Go"
+            echo ""
+            echo "Scan this QR code with the iPhone **Camera** app (Expo Go opens it):"
+            echo ""
+            echo "![QR code]($QR)"
+            echo ""
+            [ -n "$LINK" ] && echo "Or tap this link on the iPhone: <$LINK>" && echo ""
+            echo "Update page on expo.dev (also has the QR code): <$PAGE>"
+            echo ""
+            echo "Runtime version: \`$RUNTIME\` · update group: \`$GROUP\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Published. Open the run summary for the QR code: $PAGE"

@@ -136,6 +136,18 @@ Players must be **18+** and in **Spain**.
   existed. Not run by `deploy.sh`. `./top-up.sh` previews, `./top-up.sh --apply` grants. Safe to re-run
   (uses the same idempotent `grantStarterCredits`).
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
+- `.github/workflows/expo-go-update.yml` – **native preview in Expo Go** (no computer, no
+  Apple Developer account): publishes an EAS Update to branch `expo-go` (by hand, and on
+  pushes to `main` that change the app) with `npx eas-cli@latest update --branch expo-go
+  --environment preview --non-interactive`, after `npx expo install --check`. The run
+  summary shows a QR code / link (`qr.expo.dev/eas-update?projectId=…&groupId=…`) to open
+  it in Expo Go. Needs the repository secret `EXPO_TOKEN` (expo.dev access token from the
+  account that owns the project); without it, push runs are skipped. `app.json` has
+  `runtimeVersion: { policy: "appVersion" }` and `updates.url` (`u.expo.dev/<projectId>`),
+  `expo-updates` is installed, and `eas.json` holds only the CLI settings. Expo Go only
+  runs the SDK it was built for, so native packages must stay on the SDK 57 versions
+  (`npx expo install`). In Expo Go: Expo Go's own icon, name and permission texts; email
+  links open in Safari (the web app), not in Expo Go.
 - `.github/workflows/maintenance.yml` – one-off data jobs run by hand, preview unless
   "apply" is ticked: `migrate-platforms`, `rebuild-stats`, `backfill-image-hashes`
   (adds `segments` to old image fingerprints), `migrate-private` (moves old matches'
