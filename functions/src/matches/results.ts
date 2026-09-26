@@ -20,6 +20,8 @@ import { logError } from '../safeLog';
 import { prepareSettlement, writeSettlement } from './admin';
 import {
   fail,
+  gameIdsOf,
+  matchPrivateRef,
   matchRef,
   requireString,
   type DisputeDoc,
@@ -187,7 +189,11 @@ export async function submitResult(
     if ('error' in checked) throw fail('invalid-argument', checked.error);
     return { match, game, details: checked.details, winners: checked.winners };
   };
-  const [matchSnap, reportSnap] = await Promise.all([ref.get(), reportRef.get()]);
+  const [matchSnap, reportSnap, privSnap] = await Promise.all([
+    ref.get(),
+    reportRef.get(),
+    matchPrivateRef(db, matchId).get(),
+  ]);
   const first = checkMatch(matchSnap.data(), reportSnap.exists);
 
   // Upload time, duplicates, then the automatic check (Claude vision).
@@ -206,6 +212,7 @@ export async function submitResult(
     match: first.match,
     report: { winnerUids: first.winners, details: first.details },
     image: upload.image,
+    gameIds: gameIdsOf(first.match, privSnap.data()),
   });
 
   await db.runTransaction(async (tx) => {

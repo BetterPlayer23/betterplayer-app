@@ -1,10 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import Anthropic from '@anthropic-ai/sdk';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { logger } from 'firebase-functions';
-import sharp from 'sharp';
 
 import {
   DEFAULT_AUTO_THRESHOLD,
@@ -14,7 +12,12 @@ import {
   type Verification,
 } from '../shared/games';
 import { logError, registerSecret } from '../safeLog';
-import { fail, type MatchDoc } from './common';
+import { fail, type MatchDoc, type MatchPlayer } from './common';
+
+// sharp and the Anthropic SDK are loaded only when a photo is checked, so the
+// light functions (createMatch, joinMatch, ...) start faster.
+const loadSharp = async () => (await import('sharp')).default;
+const loadAnthropic = async () => (await import('@anthropic-ai/sdk')).default;
 
 // ---------- config/review (created by hand in the Firebase console)
 
@@ -48,6 +51,7 @@ export type LoadedImage = {
 async function differenceHash(image: Buffer): Promise<string> {
   const W = 17;
   const H = 16;
+  const sharp = await loadSharp();
   const px = await sharp(image)
     .rotate()
     .greyscale()
@@ -85,6 +89,7 @@ export async function loadImage(path: string): Promise<LoadedImage> {
   const file = getStorage().bucket().file(path);
   const [[data], [meta]] = await Promise.all([file.download(), file.getMetadata()]);
   try {
+    const sharp = await loadSharp();
     const jpeg = await sharp(data, { failOn: 'error' })
       .rotate()
       .resize({ width: 1568, height: 1568, fit: 'inside', withoutEnlargement: true })
@@ -106,16 +111,40 @@ export async function loadImage(path: string): Promise<LoadedImage> {
 export const imageHashRef = (db: Firestore, id: string) =>
   db.collection('imageHashes').doc(id);
 
+// The 256-bit hash cut into 27 pieces ("0:1010110011", ...). Two images at
+// most DUPLICATE_DISTANCE (26) bits apart differ in at most 26 pieces, so they
+// always share at least one: a query for images sharing any piece finds every
+// possible duplicate without reading the whole collection.
+export const HASH_SEGMENTS = 27;
+export function hashSegments(hash: string): string[] {
+  let bits = '';
+  for (const c of hash) bits += parseInt(c, 16).toString(2).padStart(4, '0');
+  const out: string[] = [];
+  let at = 0;
+  for (let i = 0; i < HASH_SEGMENTS; i++) {
+    const len = Math.ceil((bits.length - at) / (HASH_SEGMENTS - i));
+    out.push(`${i}:${bits.slice(at, at + len)}`);
+    at += len;
+  }
+  return out;
+}
+
 /**
  * Refuses an image identical or nearly identical to any earlier one.
  * Returns the id of an earlier image it merely resembles, or null.
+ * Reads: one query for the same file (sha256), one for images sharing a hash
+ * piece (only real candidates), instead of the whole collection.
  */
 export async function checkDuplicate(db: Firestore, image: LoadedImage): Promise<string | null> {
-  const all = await db.collection('imageHashes').select('hash', 'sha256').get();
+  const col = db.collection('imageHashes');
+  const [same, near] = await Promise.all([
+    col.where('sha256', '==', image.sha256).select().limit(1).get(),
+    col.where('segments', 'array-contains-any', hashSegments(image.hash)).select('hash').get(),
+  ]);
   let closest: { id: string; distance: number } | null = null;
-  for (const doc of all.docs) {
-    const same = doc.get('sha256') === image.sha256;
-    const distance = same ? 0 : hammingDistance(String(doc.get('hash') ?? ''), image.hash);
+  if (!same.empty) closest = { id: same.docs[0].id, distance: 0 };
+  for (const doc of near.docs) {
+    const distance = hammingDistance(String(doc.get('hash') ?? ''), image.hash);
     if (!closest || distance < closest.distance) closest = { id: doc.id, distance };
   }
   if (closest && closest.distance <= DUPLICATE_DISTANCE) {
@@ -131,6 +160,7 @@ export async function checkDuplicate(db: Firestore, image: LoadedImage): Promise
 export function imageHashDoc(image: LoadedImage, matchId: string, uid: string, kind: string) {
   return {
     hash: image.hash,
+    segments: hashSegments(image.hash),
     sha256: image.sha256,
     path: image.path,
     matchId,
@@ -208,6 +238,7 @@ export function buildPrompt(game: GameConfig, players: number): string {
 export type VisionRequest = { apiKey: string; model: string; prompt: string; jpeg: Buffer };
 
 async function callClaude({ apiKey, model, prompt, jpeg }: VisionRequest): Promise<VisionReading | null> {
+  const Anthropic = await loadAnthropic();
   const client = new Anthropic({ apiKey, timeout: 40_000, maxRetries: 1, logLevel: 'off' });
   const response = await client.messages.create({
     model,
@@ -299,11 +330,17 @@ export function namesMatch(a: string, b: string): boolean {
 const SCORE_KEY = { goals: 'goals', crowns: 'crowns', eliminations: 'eliminations' } as const;
 const SCORE_NAME = { goals: 'goals', crowns: 'crowns', eliminations: 'eliminations' } as const;
 
+// A player's in-game ID for this match (matches/{id}/private/data.gameIds),
+// falling back to the ID older matches kept on the player entry.
+export type GameIdMap = Record<string, string>;
+const gameIdOf = (p: MatchPlayer, ids: GameIdMap) => ids[p.uid] ?? p.gameId ?? '';
+
 export function compareReading(
   reading: VisionReading | null,
   game: GameConfig,
   match: Pick<MatchDoc, 'players'>,
   report: { winnerUids: string[]; details: ResultDetails },
+  gameIds: GameIdMap = {},
 ): Verification {
   const confidence = reading?.confidence ?? 0;
   const result = (status: Verification['status'], reason: string): Verification => ({
@@ -327,9 +364,12 @@ export function compareReading(
   const found = new Map<string, number>();
   for (const p of match.players) {
     const i = reading.playerNames.findIndex(
-      (name, idx) => !used.has(idx) && (namesMatch(name, p.gameId) || namesMatch(name, p.gamerTag)),
+      (name, idx) =>
+        !used.has(idx) && (namesMatch(name, gameIdOf(p, gameIds)) || namesMatch(name, p.gamerTag)),
     );
-    if (i < 0) return result('mismatch', `${p.gamerTag}’s name (${p.gameId}) isn’t on the screenshot.`);
+    if (i < 0) {
+      return result('mismatch', `${p.gamerTag}’s name (${gameIdOf(p, gameIds)}) isn’t on the screenshot.`);
+    }
     used.add(i);
     found.set(p.uid, i);
   }
@@ -361,7 +401,9 @@ export function compareReading(
   const winners = match.players.filter((p) => report.winnerUids.includes(p.uid));
   if (reading.winnerName) {
     const named = winners.some(
-      (w) => namesMatch(reading.winnerName, w.gameId) || namesMatch(reading.winnerName, w.gamerTag),
+      (w) =>
+        namesMatch(reading.winnerName, gameIdOf(w, gameIds)) ||
+        namesMatch(reading.winnerName, w.gamerTag),
     );
     if (!named) {
       return result('mismatch', `The screenshot shows ${reading.winnerName} as the winner.`);
@@ -385,6 +427,7 @@ export async function verifyResult(
     match: Pick<MatchDoc, 'players'>;
     report: { winnerUids: string[]; details: ResultDetails };
     image: LoadedImage;
+    gameIds?: GameIdMap;
   },
 ): Promise<{ verification: Verification & { model: string }; reading: VisionReading | null }> {
   const config = readReviewConfig((await reviewConfigRef(db).get()).data());
@@ -425,6 +468,6 @@ export async function verifyResult(
       reading: null,
     };
   }
-  const verification = compareReading(reading, opts.game, opts.match, opts.report);
+  const verification = compareReading(reading, opts.game, opts.match, opts.report, opts.gameIds);
   return { verification: { ...verification, model: config.visionModel }, reading };
 }

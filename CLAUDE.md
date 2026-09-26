@@ -98,12 +98,22 @@ Players must be **18+** and in **Spain**.
 - `src/app/(auth)/` – Sign up and Log in, shown only when signed out.
 - `src/app/complete-profile.tsx` – shown if someone is signed in but has no profile yet.
 - `src/auth/` – sign-in state (`AuthProvider`), form checks and plain error messages.
-- `src/firebase/` – Firebase app, Auth and Firestore setup.
+- `src/firebase/` – Firebase app, Auth and Firestore setup. On the web Firestore uses a
+  persistent local cache (IndexedDB, `persistentLocalCache`): screens paint from the
+  cache and a reopened app only downloads what changed.
 - `src/wallet/` – live, read-only wallet and ledger data, credit formatting and labels.
+  Wallet history is read 20 lines at a time ("Show more", up to 100). A negative
+  available balance (an admin reversal after a payout) shows an explanation.
 - `src/matches/` – match types, live Firestore hooks, and `api.ts` (the only way the
-  app changes matches: callable Cloud Functions). `src/app/match.tsx` is the Match
+  app changes matches: callable Cloud Functions). `MatchesProvider` keeps ONE live
+  copy of "open matches" (30) and "my matches" (20) for the whole app; Home and
+  Matches slice it (`useOpenMatches(max)` / `useMyMatches(max)`), so they don't open
+  duplicate listeners. `src/app/match.tsx` is the Match
   room (`/match?id=…`; a query parameter so it works as a static page on GitHub Pages).
-- `functions/` – Cloud Functions (TypeScript, Functions v2, Node 22, region `europe-west1`).
+- `functions/` – Cloud Functions (TypeScript, Functions v2, Node 22, region `europe-west1`,
+  `maxInstances` 10; the photo functions `submitResult` / `disputeResult` run with
+  1 GiB, 1 CPU, `concurrency` 8 and `maxInstances` 30). sharp, the Anthropic SDK and
+  nodemailer are loaded lazily (`await import`) so the light functions start faster.
   `onUserCreated` gives the 10 starter credits once (`ledger/grant_{uid}` + `wallets/{uid}`).
 - `firestore.rules`, `firestore.indexes.json` – security rules and indexes.
 - `storage.rules` – Firebase Storage rules for result screenshots.
@@ -127,7 +137,12 @@ Players must be **18+** and in **Spain**.
   (uses the same idempotent `grantStarterCredits`).
 - `.github/workflows/web-preview.yml` – publishes the web preview on every push to `main`.
 - `.github/workflows/maintenance.yml` – one-off data jobs run by hand, preview unless
-  "apply" is ticked: `migrate-platforms`, `rebuild-stats`. Prints counts only.
+  "apply" is ticked: `migrate-platforms`, `rebuild-stats`, `backfill-image-hashes`
+  (adds `segments` to old image fingerprints), `migrate-private` (moves old matches'
+  lobby code and game IDs into `matches/{id}/private/data`). Prints counts only.
+- `storage.lifecycle.json` – result photos are deleted 90 days after upload (the deploy
+  workflow applies it to the bucket with `gcloud storage buckets update`). The image
+  fingerprints in `imageHashes` are kept. The beta rules (section 7) say so.
 - `BACKLOG.md` – agreed ideas not built yet (native iOS app, Clash Royale battle log).
 - `.github/workflows/inspect-log.yml` – read-only, run by hand (function name + time
   window): describes WARNING+ log entries WITHOUT printing their text, and says
@@ -141,6 +156,12 @@ Players must be **18+** and in **Spain**.
 ## Accounts
 
 - Email and password sign-in (Firebase Auth). Users stay signed in.
+- **Email verification**: sign-up sends a verification link; while `emailVerified` is
+  false the app shows `src/app/verify-email.tsx` (`AuthStatus` `needsEmail`: "I've
+  clicked the link" reloads the user, "Send the email again"). Existing players see it
+  once at their next login. `createMatch` and `joinMatch` refuse an unverified email
+  (`requireVerifiedEmail`, `request.auth.token.email_verified`). Emulator tests mark
+  users verified with the Admin SDK (`updateUser(uid, { emailVerified: true })`).
 - The tabs are only reachable when signed in (`Stack.Protected` in `src/app/_layout.tsx`).
 - `users/{uid}` holds: `gamerTag`, `platforms` (a list of 1–5 of `pc`, `playstation`,
   `xbox`, `switch`, `mobile`; multi-select chips at sign-up and in Profile; older
@@ -166,12 +187,12 @@ Players must be **18+** and in **Spain**.
   for existing players, once at next login; checkbox "I am 18+ and accept the beta
   rules"). Read-only `src/app/beta-rules.tsx`, linked from Profile and Sign up.
 - `createMatch` / `joinMatch` refuse players who haven't accepted the current version.
-- Current version: **v5**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
+- Current version: **v6**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
   (the game rules above; 10% fee, winner 90%), 4 Fair play, 5 Review (checked
   automatically; unclear checks and disputes go to an admin, whose decision is
   final), 6 Beta, 7 Your data (controller "Betterplayer (Better.player.one@gmail.com)";
   stats visible to other players; screenshots checked by an AI system (Anthropic);
-  any player can dispute).
+  any player can dispute; result screenshots deleted after 90 days, fingerprints kept).
 
 ## Credits data
 
@@ -211,6 +232,13 @@ Players must be **18+** and in **Spain**.
 - Create/join need a profile with the game's ID, at least 2 available credits, and
   fewer than 10 matches created or joined today (Europe/Madrid, `dailyCounts/{uid}_{day}`).
 - Share codes: 6 characters without 0/O/1/I, reserved in `matchCodes/{code}`.
+- **Private match data**: the lobby code and each player's in-game ID live in
+  `matches/{id}/private/data` (`MatchPrivateDoc`: `lobbyCode`, `gameIds` uid → id),
+  readable only by the match's players and admins (`useMatchPrivate` in the app,
+  `gameIdOf()` to read a player's id). The match document (readable by every
+  signed-in player) holds only `uid` + `gamerTag` per player. Matches created before
+  this keep `players[].gameId` / `lobbyCode` until the `migrate-private` job runs;
+  `gameIdsOf()` (functions) and `gameIdOf()` (app) read both shapes.
 - `startMatch` locks 2 credits per player in one transaction: ledger
   `lock_{matchId}_{uid}` (type `stake_lock`, amount 2) and wallet available → locked.
   Idempotent. If any player is short, nothing is locked.
@@ -248,9 +276,12 @@ Players must be **18+** and in **Spain**.
 - Screenshots: Storage `results/{matchId}/{uid}/{file}`. A player of a started or
   awaiting match uploads into their own folder only, after `startedAt` and before
   `responseDeadline`; jpeg/png/webp (no HEIC: the server can't read it), ≤ 10 MB;
-  never overwritten or deleted (`resource == null` on create). Players of the match
-  and admins can read. Functions check the file exists, is in the caller's folder,
-  was uploaded inside the match window, and isn't a (near-)duplicate.
+  never overwritten (`resource == null` on create); deleted after 90 days by the bucket
+  lifecycle rule. Players of the match and admins can read. Functions check the file
+  exists, is in the caller's folder, was uploaded inside the match window, and isn't a
+  (near-)duplicate. The app shrinks the picture before upload (`shrinkImage` in
+  `src/matches/upload.ts`: longest side 1600 px, JPEG 85%; web canvas / native
+  `expo-image-manipulator`), so uploads are small and fast.
 - Score boxes: "Next" (`enterKeyHint`) moves to the following box and "Done" on the
   last; on iOS native an `InputAccessoryView` bar adds Next/Done above the number
   pad (the iPhone number pad has no return key). Clash Royale crowns jump to the
@@ -317,6 +348,11 @@ Players must be **18+** and in **Spain**.
 - Duplicates: 256-bit difference hash + SHA-256 of every accepted result image in
   `imageHashes/{matchId}_{uid}_{report|dispute}` (server-only). ≤ 26 bits apart →
   refused; ≤ 48 → accepted but flagged `similarTo` (never auto-approved).
+  `checkDuplicate` never reads the whole collection: one query on `sha256` (same
+  file) and one `array-contains-any` on `segments` (the hash cut into 27 pieces,
+  `hashSegments`; two hashes ≤ 26 bits apart always share a piece), so only real
+  candidates are read. Entries saved before `segments` existed get it from the
+  `backfill-image-hashes` maintenance job.
 - Auto-approval happens at the moment a match would go to `under_review`
   (everyone confirmed, or the 30-minute window closed), in the same transaction:
   `autoReviewReasons` in shared games must be empty (auto-approve on, no dispute,
@@ -350,8 +386,10 @@ Players must be **18+** and in **Spain**.
   with the placeholder the function logs a warning and sends nothing. After setting
   the real value, **redeploy** (Actions → Firebase deploy → Run workflow): functions
   use the secret version that was current at deploy time.
-- Emulator tests: put `GMAIL_APP_PASSWORD=...` and `ANTHROPIC_API_KEY=...` in `functions/.secret.local`
-  (git-ignored); in the emulator mail is only built (jsonTransport), never sent.
+- Emulator tests: copy `functions/.secret.local.example` to `functions/.secret.local`
+  (git-ignored; any value ≥ 8 characters works). Without it the emulator has no
+  `GMAIL_APP_PASSWORD`, no alert is recorded and the alert tests hang. In the emulator
+  mail is only built (jsonTransport), never sent, and the vision API is never called.
 
 ## Look and feel ("esports neon")
 

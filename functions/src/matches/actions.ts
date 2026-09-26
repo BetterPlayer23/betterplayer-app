@@ -16,11 +16,13 @@ import {
   closedMessage,
   countTodaysMatch,
   fail,
+  matchPrivateRef,
   matchRef,
   randomShareCode,
   requireString,
   type MatchDoc,
   type MatchPlayer,
+  type MatchPrivateDoc,
 } from './common';
 
 // Every action below takes the caller's uid (already checked as signed in)
@@ -72,12 +74,7 @@ export async function createMatch(db: Firestore, uid: string, data: Data, now = 
       const money = matchMoney(maxPlayers, feeRate);
 
       const nowTs = Timestamp.fromDate(now);
-      const host: MatchPlayer = {
-        uid,
-        gamerTag: player.gamerTag,
-        gameId: player.gameId,
-        joinedAt: nowTs,
-      };
+      const host: MatchPlayer = { uid, gamerTag: player.gamerTag, joinedAt: nowTs };
       const match: MatchDoc = {
         game: game.id,
         gameName: game.name,
@@ -89,7 +86,6 @@ export async function createMatch(db: Firestore, uid: string, data: Data, now = 
         playerUids: [uid],
         status: 'open',
         code,
-        lobbyCode: null,
         entry: money.entry,
         pot: money.pot,
         fee: money.fee,
@@ -99,7 +95,10 @@ export async function createMatch(db: Firestore, uid: string, data: Data, now = 
         updatedAt: nowTs,
         expiresAt: Timestamp.fromMillis(now.getTime() + OPEN_MATCH_MINUTES * 60_000),
       };
+      // Lobby code and game IDs are private to the players (and admins).
+      const priv: MatchPrivateDoc = { lobbyCode: null, gameIds: { [uid]: player.gameId }, updatedAt: nowTs };
       tx.create(ref, match);
+      tx.create(matchPrivateRef(db, ref.id), priv);
       tx.create(codeRef, { matchId: ref.id, createdAt: nowTs });
       countTodaysMatch(tx, player, now);
       return true;
@@ -151,16 +150,18 @@ export async function joinMatch(db: Firestore, uid: string, data: Data, now = ne
     if (!game) throw fail('failed-precondition', 'This game is no longer available.');
 
     const player = await checkEligible(tx, db, uid, game, now);
-    const players = [
-      ...match.players,
-      { uid, gamerTag: player.gamerTag, gameId: player.gameId, joinedAt: Timestamp.fromDate(now) },
-    ];
+    const players = [...match.players, { uid, gamerTag: player.gamerTag, joinedAt: Timestamp.fromDate(now) }];
     tx.update(ref, {
       players,
       playerUids: FieldValue.arrayUnion(uid),
       status: players.length >= match.maxPlayers ? 'full' : 'open',
       updatedAt: Timestamp.fromDate(now),
     });
+    tx.set(
+      matchPrivateRef(db, matchId),
+      { gameIds: { [uid]: player.gameId }, updatedAt: Timestamp.fromDate(now) },
+      { merge: true },
+    );
     countTodaysMatch(tx, player, now);
   });
   return { matchId };
@@ -181,6 +182,11 @@ export async function leaveMatch(db: Firestore, uid: string, data: Data, now = n
     if (match.status !== 'open' && match.status !== 'full') {
       throw fail('failed-precondition', 'You can only leave before the match starts.');
     }
+    tx.set(
+      matchPrivateRef(db, ref.id),
+      { gameIds: { [uid]: FieldValue.delete() }, updatedAt: Timestamp.fromDate(now) },
+      { merge: true },
+    );
     tx.update(ref, {
       players: match.players.filter((p) => p.uid !== uid),
       playerUids: FieldValue.arrayRemove(uid),
@@ -211,7 +217,12 @@ export async function setLobbyCode(db: Firestore, uid: string, data: Data, now =
     if (!['open', 'full', 'started'].includes(match.status)) {
       throw fail('failed-precondition', closedMessage(match.status));
     }
-    tx.update(ref, { lobbyCode: code || null, updatedAt: Timestamp.fromDate(now) });
+    tx.set(
+      matchPrivateRef(db, ref.id),
+      { lobbyCode: code || null, updatedAt: Timestamp.fromDate(now) },
+      { merge: true },
+    );
+    tx.update(ref, { updatedAt: Timestamp.fromDate(now) });
   });
   return { ok: true };
 }

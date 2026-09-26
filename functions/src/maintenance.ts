@@ -4,7 +4,8 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 
 import { feeRateOf, splitWinnings, winnersOf } from './shared/games';
 import { statsForMatch, type GameStats, type StatsEntry } from './shared/stats';
-import type { MatchDoc } from './matches/common';
+import { matchPrivateRef, type MatchDoc } from './matches/common';
+import { hashSegments } from './matches/vision';
 
 const PLATFORMS = ['pc', 'playstation', 'xbox', 'switch', 'mobile'];
 
@@ -78,4 +79,67 @@ export async function rebuildStats(
     }
   }
   return { matches: matches.length, players: Object.keys(stats).length };
+}
+
+/**
+ * imageHashes/{id}: adds the `segments` field (pieces of the hash used to find
+ * near-duplicates with a query) to entries saved before it existed.
+ * Returns how many entries need (or got) it.
+ */
+export async function backfillImageHashes(db: Firestore, apply: boolean): Promise<number> {
+  const all = await db.collection('imageHashes').select('hash', 'segments').get();
+  let count = 0;
+  let batch = db.batch();
+  let inBatch = 0;
+  for (const d of all.docs) {
+    const hash = d.get('hash');
+    if (typeof hash !== 'string' || Array.isArray(d.get('segments'))) continue;
+    count++;
+    if (!apply) continue;
+    batch.update(d.ref, { segments: hashSegments(hash) });
+    if (++inBatch === 400) {
+      await batch.commit();
+      batch = db.batch();
+      inBatch = 0;
+    }
+  }
+  if (apply && inBatch) await batch.commit();
+  return count;
+}
+
+/**
+ * matches/{id}: moves the lobby code and the players' game IDs, which older
+ * matches kept on the match document (readable by every player), into
+ * matches/{id}/private/data (readable by the match's players and admins).
+ * Returns how many matches need (or got) the move.
+ */
+export async function migratePrivate(db: Firestore, apply: boolean): Promise<number> {
+  const all = await db.collection('matches').select('players', 'lobbyCode').get();
+  let count = 0;
+  for (const d of all.docs) {
+    const players = (d.get('players') ?? []) as { uid: string; gamerTag: string; gameId?: string; joinedAt: unknown }[];
+    const hasIds = players.some((p) => p.gameId !== undefined);
+    if (!hasIds && d.get('lobbyCode') === undefined) continue;
+    count++;
+    if (!apply) continue;
+    const gameIds: Record<string, string> = {};
+    for (const p of players) if (p.gameId) gameIds[p.uid] = p.gameId;
+    await db.runTransaction(async (tx) => {
+      const priv = (await tx.get(matchPrivateRef(db, d.id))).data();
+      tx.set(
+        matchPrivateRef(db, d.id),
+        {
+          lobbyCode: priv?.lobbyCode ?? d.get('lobbyCode') ?? null,
+          gameIds: { ...gameIds, ...priv?.gameIds },
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      tx.update(d.ref, {
+        players: players.map(({ gameId: _gameId, ...p }) => p),
+        lobbyCode: FieldValue.delete(),
+      });
+    });
+  }
+  return count;
 }

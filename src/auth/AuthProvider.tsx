@@ -1,6 +1,7 @@
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
@@ -18,6 +19,7 @@ import type { GameIds, PlatformId, Profile } from './profile';
 
 // loading:      still finding out who is signed in
 // signedOut:    show Sign up / Log in
+// needsEmail:   signed in but the email address isn't verified yet
 // needsProfile: signed in but users/{uid} is missing (sign-up was interrupted)
 // signedIn:     show the tabs
 // error:        couldn't read the profile (e.g. no connection)
@@ -25,6 +27,7 @@ import type { GameIds, PlatformId, Profile } from './profile';
 export type AuthStatus =
   | 'loading'
   | 'signedOut'
+  | 'needsEmail'
   | 'needsProfile'
   | 'needsRules'
   | 'signedIn'
@@ -46,6 +49,9 @@ type AuthContextValue = {
   logIn: (email: string, password: string) => Promise<void>;
   // Accept the current beta rules (saved by a Cloud Function).
   acceptRules: () => Promise<void>;
+  // Email verification: send the link again / check whether it was clicked.
+  resendVerification: () => Promise<void>;
+  checkVerified: () => Promise<boolean>;
   resetPassword: (email: string) => Promise<void>;
   logOut: () => Promise<void>;
   updateGamerTag: (gamerTag: string) => Promise<void>;
@@ -66,15 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [creating, setCreating] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
+  // Bumped after user.reload() so the status is worked out again.
+  const [verifiedTick, setVerifiedTick] = useState(0);
 
   // Firebase keeps the session, so this fires with the saved user on launch.
   useEffect(() => onAuthStateChanged(auth, setUser), []);
 
-  // Live copy of users/{uid} while signed in.
+  const emailVerified = !!user?.emailVerified;
+
+  // Live copy of users/{uid} while signed in (and verified).
   useEffect(() => {
     setProfile(undefined);
     setProfileError(false);
-    if (!user) return;
+    if (!user || !emailVerified) return;
     return onSnapshot(
       doc(db, 'users', user.uid),
       (snap) => {
@@ -85,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       () => setProfileError(true),
     );
-  }, [user, attempt]);
+  }, [user, attempt, emailVerified, verifiedTick]);
 
   // Is this player a Betterplayer admin? (Shows the Admin tab.)
   // If the read is refused (e.g. the live rules don't allow it yet), try again
@@ -118,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   else if (user === null) status = 'signedOut';
   // Keep the sign-up screen up until its profile write has finished.
   else if (creating) status = 'signedOut';
+  else if (!emailVerified) status = 'needsEmail';
   else if (profileError) status = 'error';
   else if (profile === undefined) status = 'loading';
   else if (!profile) status = 'needsProfile';
@@ -146,11 +157,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async signUp({ email, password, gamerTag, platforms }) {
       setCreating(true);
       try {
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
         await createProfile(gamerTag, platforms);
+        // The verification link; the player can ask for it again on the next screen.
+        await sendEmailVerification(cred.user).catch(() => undefined);
       } finally {
         setCreating(false);
       }
+    },
+    async resendVerification() {
+      const current = auth.currentUser;
+      if (!current) throw new Error('Not signed in');
+      await sendEmailVerification(current);
+    },
+    async checkVerified() {
+      const current = auth.currentUser;
+      if (!current) return false;
+      await current.reload();
+      // A fresh ID token, so Cloud Functions see email_verified straight away.
+      if (current.emailVerified) await current.getIdToken(true);
+      setVerifiedTick((n) => n + 1);
+      return current.emailVerified;
     },
     createProfile,
     async acceptRules() {

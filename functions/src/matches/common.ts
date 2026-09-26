@@ -22,8 +22,16 @@ import { BETA_RULES_VERSION } from '../shared/betaRules';
 export type MatchPlayer = {
   uid: string;
   gamerTag: string; // snapshot at join time
-  gameId: string; // the player's in-game ID for this match's game
+  gameId?: string; // only on matches created before game IDs moved to private/data
   joinedAt: Timestamp;
+};
+
+// matches/{id}/private/data: what only the players of the match (and admins)
+// may see. The match document itself is readable by every signed-in player.
+export type MatchPrivateDoc = {
+  lobbyCode: string | null; // the host's in-game private lobby code
+  gameIds: Record<string, string>; // uid -> the player's in-game ID for this game
+  updatedAt: Timestamp;
 };
 
 export type MatchDoc = {
@@ -37,7 +45,7 @@ export type MatchDoc = {
   playerUids: string[];
   status: MatchStatus;
   code: string;
-  lobbyCode: string | null;
+  lobbyCode?: string | null; // older matches only; now in private/data
   entry: number;
   pot: number;
   fee: number;
@@ -105,6 +113,15 @@ export function requireUid(auth: { uid: string } | undefined): string {
   return auth.uid;
 }
 
+// Creating or joining a match needs a verified email address.
+export function requireVerifiedEmail(auth: { token?: { email_verified?: boolean } } | undefined) {
+  if (auth?.token?.email_verified !== true) {
+    throw fail('failed-precondition', 'Verify your email address first (check your inbox).', {
+      reason: 'email_unverified',
+    });
+  }
+}
+
 export function requireString(value: unknown, name: string): string {
   if (typeof value !== 'string' || !value.trim()) {
     throw fail('invalid-argument', `Missing ${name}.`);
@@ -132,6 +149,17 @@ export function randomShareCode(): string {
 
 export const matchRef = (db: Firestore, id: string) =>
   db.collection('matches').doc(id) as DocumentReference<MatchDoc>;
+
+export const matchPrivateRef = (db: Firestore, id: string) =>
+  db.collection('matches').doc(id).collection('private').doc('data') as DocumentReference<MatchPrivateDoc>;
+
+// The players' game IDs of a match: private/data, or (older matches) the ids
+// kept on the player entries.
+export function gameIdsOf(match: MatchDoc, priv: MatchPrivateDoc | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const p of match.players) if (p.gameId) out[p.uid] = p.gameId;
+  return { ...out, ...priv?.gameIds };
+}
 
 export type EligiblePlayer = {
   uid: string;

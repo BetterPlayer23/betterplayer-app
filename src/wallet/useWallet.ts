@@ -65,8 +65,8 @@ export function useWallet(): Live<Wallet> & { exists: boolean } {
   return state;
 }
 
-// The player's ledger entries, newest first.
-export function useLedger(max = 50): Live<LedgerEntry[]> {
+// The player's ledger entries, newest first. `max` can grow ("Show more").
+export function useLedger(max = 20): Live<LedgerEntry[]> {
   const { user } = useAuth();
   const uid = user?.uid;
   const [state, setState] = useState<Live<LedgerEntry[]>>({

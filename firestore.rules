@@ -1,8 +1,7 @@
 rules_version = '2';
 
-// Betterplayer Firestore security rules.
-// NOT deployed automatically. Paste into Firebase console > Firestore > Rules
-// (or deploy with the Firebase CLI) once you've compared it with the live rules.
+// Betterplayer Firestore security rules. Deployed by the "Firebase deploy"
+// workflow (and ./deploy.sh).
 //
 // Money rule: the app never writes credits, matches or disputes. Only Cloud
 // Functions do, and they bypass these rules. Anything not listed here is
@@ -113,6 +112,12 @@ service cloud.firestore {
         allow write: if false;
       }
       match /disputes/{uid} {
+        allow read: if isMatchPlayer(matchId) || isAdmin();
+        allow write: if false;
+      }
+      // Lobby code and the players' game IDs: only the match's players and
+      // admins. Written only by Cloud Functions.
+      match /private/{doc} {
         allow read: if isMatchPlayer(matchId) || isAdmin();
         allow write: if false;
       }

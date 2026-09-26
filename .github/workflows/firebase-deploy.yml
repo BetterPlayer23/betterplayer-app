@@ -14,6 +14,7 @@ on:
       - 'firestore.rules'
       - 'firestore.indexes.json'
       - 'storage.rules'
+      - 'storage.lifecycle.json'
       - 'firebase.json'
       - '.firebaserc'
       - '.github/workflows/firebase-deploy.yml'
@@ -89,6 +90,13 @@ jobs:
               echo "::warning::$NAME was missing; created a placeholder. Set the real value, then run this workflow again."
             fi
           done
+
+      # Result photos are deleted 90 days after upload (storage.lifecycle.json;
+      # the beta rules say so). Image fingerprints in Firestore are kept.
+      - name: Delete result photos after 90 days
+        run: |
+          BUCKET=$(python3 -c "import re;print(re.search(r\"storageBucket: '([^']+)'\", open('src/firebase/config.ts').read()).group(1))")
+          gcloud storage buckets update "gs://$BUCKET" --lifecycle-file=storage.lifecycle.json --project "$PROJECT"
 
       # --non-interactive: nobody is there to answer questions.
       # --force: set up the cleanup policy for old function builds, and remove

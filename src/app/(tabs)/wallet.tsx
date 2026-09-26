@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { ENTRY_CREDITS, percent } from '@shared/games';
 
+import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { FormMessage } from '@/components/FormMessage';
@@ -12,9 +14,14 @@ import { useFeeRate } from '@/matches/useFeeRate';
 import { formatCredits, formatDate, historyAmount, isLock, ledgerLabel } from '@/wallet/format';
 import { useLedger, useWallet, type LedgerEntry } from '@/wallet/useWallet';
 
+// History is read 20 lines at a time ("Show more"), up to 100.
+const PAGE = 20;
+const HISTORY_MAX = 100;
+
 export default function WalletScreen() {
   const wallet = useWallet();
-  const ledger = useLedger();
+  const [shown, setShown] = useState(PAGE);
+  const ledger = useLedger(shown);
   const feeRate = useFeeRate();
 
   return (
@@ -40,6 +47,12 @@ export default function WalletScreen() {
         pot and the winner gets {percent(1 - feeRate)} (shared equally on a tie).
       </Text>
       {wallet.error && <FormMessage kind="error" text={wallet.error} />}
+      {!wallet.loading && wallet.data.available < 0 && (
+        <FormMessage
+          kind="error"
+          text="Your available credits are below zero: an admin corrected a match result after its credits had already been paid out. New matches need at least 2 available credits, so you can play again after your next win or a credit reset."
+        />
+      )}
 
       <SectionTitle>History</SectionTitle>
       {ledger.error ? (
@@ -56,6 +69,13 @@ export default function WalletScreen() {
           {ledger.data.map((entry) => (
             <HistoryRow key={entry.id} entry={entry} />
           ))}
+          {ledger.data.length >= shown && shown < HISTORY_MAX && (
+            <Button
+              label="Show more"
+              variant="outline"
+              onPress={() => setShown((n) => Math.min(HISTORY_MAX, n + PAGE))}
+            />
+          )}
         </View>
       )}
     </Screen>

@@ -1,3 +1,4 @@
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 import { ref, uploadBytes } from 'firebase/storage';
@@ -15,6 +16,11 @@ const EXT: Record<string, string> = {
 };
 
 const TOO_BIG = 'That photo is over 10 MB. Take it again.';
+
+// Photos are shrunk on the phone before upload: the server reads them at this
+// size anyway, uploads are ~10x faster and storage stays small.
+export const MAX_SIDE = 1600;
+export const JPEG_QUALITY = 0.85;
 const WRONG_TYPE = 'That photo format isn’t supported. Take it again with the camera.';
 
 // Web: a file input. With `camera`, it asks the phone to open the back camera
@@ -78,20 +84,60 @@ export async function pickScreenshot(): Promise<PickedImage | null> {
   return { uri: asset.uri, mimeType, fileName: asset.fileName ?? 'screenshot' };
 }
 
-// Uploads into results/{matchId}/{uid}/ and returns the storage path.
+// Web: draw the picture on a canvas no bigger than MAX_SIDE and save it as JPEG.
+async function shrinkWeb(blob: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('shrink failed'))), 'image/jpeg', JPEG_QUALITY),
+  );
+}
+
+// Native: the same with expo-image-manipulator.
+async function shrinkNative(uri: string): Promise<Blob> {
+  const context = ImageManipulator.manipulate(uri);
+  const image = await context.renderAsync();
+  const longest = Math.max(image.width, image.height);
+  if (longest > MAX_SIDE) {
+    context.resize(image.width >= image.height ? { width: MAX_SIDE } : { height: MAX_SIDE });
+  }
+  const saved = await (await context.renderAsync()).saveAsync({
+    format: SaveFormat.JPEG,
+    compress: JPEG_QUALITY,
+  });
+  return (await fetch(saved.uri)).blob();
+}
+
+// A smaller JPEG of the picture; the original if it can't be shrunk.
+export async function shrinkImage(image: PickedImage): Promise<{ blob: Blob; mimeType: string }> {
+  try {
+    const blob = Platform.OS === 'web' ? await shrinkWeb(await (await fetch(image.uri)).blob()) : await shrinkNative(image.uri);
+    return { blob, mimeType: 'image/jpeg' };
+  } catch {
+    return { blob: await (await fetch(image.uri)).blob(), mimeType: image.mimeType };
+  }
+}
+
+// Shrinks the picture, uploads it into results/{matchId}/{uid}/ and returns
+// the storage path.
 export async function uploadResultImage(
   matchId: string,
   uid: string,
   image: PickedImage,
 ): Promise<string> {
-  const blob = await (await fetch(image.uri)).blob();
+  const { blob, mimeType } = await shrinkImage(image);
   if (blob.size > SCREENSHOT_MAX_BYTES) {
     throw new Error(TOO_BIG);
   }
-  const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${EXT[image.mimeType] ?? 'jpg'}`;
+  const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${EXT[mimeType] ?? 'jpg'}`;
   const path = `results/${matchId}/${uid}/${name}`;
   try {
-    await uploadBytes(ref(storage, path), blob, { contentType: image.mimeType });
+    await uploadBytes(ref(storage, path), blob, { contentType: mimeType });
   } catch {
     throw new Error('Couldn’t upload the photo. Check your connection and try again.');
   }

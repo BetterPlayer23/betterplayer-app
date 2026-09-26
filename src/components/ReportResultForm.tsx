@@ -22,7 +22,7 @@ import { TextField } from '@/components/TextField';
 import { gameById } from '@/constants/games';
 import { colors, fonts } from '@/constants/theme';
 import { matchError, submitResult } from '@/matches/api';
-import type { Match } from '@/matches/types';
+import type { Match, MatchPrivate } from '@/matches/types';
 import { uploadResultImage, type PickedImage } from '@/matches/upload';
 
 type Scores = Record<string, string>; // uid -> text typed
@@ -33,7 +33,15 @@ const toNumbers = (s: Scores, uids: string[]) =>
   Object.fromEntries(uids.map((u) => [u, s[u] === undefined || s[u] === '' ? NaN : Number(s[u])]));
 
 // "Report result": winner, score fields for the game, screenshot, notes.
-export function ReportResultForm({ match, uid }: { match: Match; uid: string }) {
+export function ReportResultForm({
+  match,
+  uid,
+  priv,
+}: {
+  match: Match;
+  uid: string;
+  priv?: MatchPrivate | null;
+}) {
   const game = gameById(match.game);
   const uids = match.players.map((p) => p.uid);
   const [winner, setWinner] = useState<string | null>(null);
@@ -185,7 +193,7 @@ export function ReportResultForm({ match, uid }: { match: Match; uid: string }) 
           Result: {describeOutcome(preview.winners, match.players)}
         </Text>
       )}
-      <ResultScreenExample game={game} players={match.players} />
+      <ResultScreenExample game={game} players={match.players} priv={priv} />
       <CameraField
         label={
           game.capture === 'camera_or_library' ? 'Screenshot or photo of the result' : 'Photo of the final result'

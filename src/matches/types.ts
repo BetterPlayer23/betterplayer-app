@@ -6,8 +6,18 @@ import type { MatchStatus, ReviewReason, Verification } from '@shared/games';
 export type MatchPlayer = {
   uid: string;
   gamerTag: string;
-  gameId: string;
+  gameId?: string; // only on matches created before game IDs moved to private data
 };
+
+// matches/{id}/private/data: readable by the match's players and admins only.
+export type MatchPrivate = {
+  lobbyCode: string | null;
+  gameIds: Record<string, string>; // uid -> in-game ID for this match's game
+};
+
+// A player's in-game ID for a match (private data, or older matches' player entry).
+export const gameIdOf = (p: MatchPlayer | undefined, priv: MatchPrivate | null | undefined) =>
+  (p && (priv?.gameIds[p.uid] ?? p.gameId)) || '';
 
 export type Match = {
   id: string;
@@ -21,7 +31,6 @@ export type Match = {
   playerUids: string[];
   status: MatchStatus;
   code: string;
-  lobbyCode: string | null;
   entry: number;
   pot: number;
   fee: number;

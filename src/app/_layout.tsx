@@ -14,6 +14,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
+import { MatchesProvider } from '@/matches/MatchesProvider';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/Button';
 import { colors, fonts } from '@/constants/theme';
@@ -67,7 +68,9 @@ export default function RootLayout() {
     <ThemeProvider value={theme}>
       <StatusBar style="light" />
       <AuthProvider>
-        <RootNavigator />
+        <MatchesProvider>
+          <RootNavigator />
+        </MatchesProvider>
       </AuthProvider>
     </ThemeProvider>
   );
@@ -125,6 +128,12 @@ function RootNavigator() {
               />
             ),
           }}
+        />
+      </Stack.Protected>
+      <Stack.Protected guard={status === 'needsEmail'}>
+        <Stack.Screen
+          name="verify-email"
+          options={{ headerShown: true, header: () => <AppHeader /> }}
         />
       </Stack.Protected>
       <Stack.Protected guard={status === 'needsProfile'}>

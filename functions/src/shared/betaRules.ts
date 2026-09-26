@@ -3,9 +3,9 @@
 // To change the rules: edit the text AND bump BETA_RULES_VERSION, so every
 // player is asked to accept the new version once.
 
-export const BETA_RULES_VERSION = 'v5';
+export const BETA_RULES_VERSION = 'v6';
 
-export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v5)';
+export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v6)';
 
 export const BETA_RULES_CONTACT_EMAIL = 'Better.player.one@gmail.com';
 
@@ -36,7 +36,7 @@ export const BETA_RULES: readonly { title: string; text: string }[] = [
   },
   {
     title: 'Your data',
-    text: 'Betterplayer (Better.player.one@gmail.com) stores your email, gamer tag, game IDs, match history and result screenshots only to run this beta, on Google Firebase. Your gamer tag and match stats (matches played, wins, skill rating) are visible to other beta players. Nothing is sold or used for advertising. Data is deleted when the beta ends or on request. Email us to access, correct or delete your data; you can also complain to the AEPD (aepd.es). Result screenshots are checked automatically by an AI system (Anthropic) to confirm scores. Any player can dispute a result and a Betterplayer admin will review it.',
+    text: 'Betterplayer (Better.player.one@gmail.com) stores your email, gamer tag, game IDs, match history and result screenshots only to run this beta, on Google Firebase. Your gamer tag and match stats (matches played, wins, skill rating) are visible to other beta players. Nothing is sold or used for advertising. Data is deleted when the beta ends or on request. Email us to access, correct or delete your data; you can also complain to the AEPD (aepd.es). Result screenshots are checked automatically by an AI system (Anthropic) to confirm scores, and are deleted 90 days after upload (an image fingerprint, not the picture, is kept to detect reused photos). Any player can dispute a result and a Betterplayer admin will review it.',
   },
 ];
 

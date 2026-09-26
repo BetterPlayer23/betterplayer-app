@@ -35,8 +35,8 @@ import {
   setLobbyCode,
   startMatch,
 } from '@/matches/api';
-import { useDisputes, useMatch, useReports } from '@/matches/hooks';
-import type { Match } from '@/matches/types';
+import { useDisputes, useMatch, useMatchPrivate, useReports } from '@/matches/hooks';
+import { gameIdOf, type Match, type MatchPrivate } from '@/matches/types';
 import { formatCredits } from '@/wallet/format';
 
 export default function MatchRoomScreen() {
@@ -82,6 +82,8 @@ function Room({ match }: { match: Match }) {
   const canSeeResult = (isPlayer || isAdmin) && !!match.reportedByUid;
   const reports = useReports(match.id, canSeeResult);
   const disputes = useDisputes(match.id, canSeeResult && !!match.disputed);
+  // Lobby code and game IDs: private to the players of the match (and admins).
+  const priv = useMatchPrivate(match.id, isPlayer || isAdmin).data;
   const report = reports.data.find((r) => r.uid === match.reportedByUid) ?? reports.data[0];
   const winners = winnersOf(match);
   const shares = splitWinnings(match.players.length, winners, feeRateOf(match));
@@ -163,7 +165,7 @@ function Room({ match }: { match: Match }) {
             The match has started and {ENTRY_CREDITS} credits are locked from each player. Play your
             game, then report the result here.
           </Text>
-          <ReportResultForm match={match} uid={uid} />
+          <ReportResultForm match={match} uid={uid} priv={priv} />
         </>
       )}
 
@@ -207,9 +209,11 @@ function Room({ match }: { match: Match }) {
                 {p.uid === uid ? ' (you)' : ''}
                 <Text style={styles.statsLink}> · stats ›</Text>
               </Text>
-              <Text style={styles.playerId}>
-                {game?.gameIdLabel}: {p.gameId}
-              </Text>
+              {!!gameIdOf(p, priv) && (
+                <Text style={styles.playerId}>
+                  {game?.gameIdLabel}: {gameIdOf(p, priv)}
+                </Text>
+              )}
             </Pressable>
             {p.uid === match.hostUid && <Text style={styles.hostBadge}>HOST</Text>}
           </View>
@@ -230,9 +234,9 @@ function Room({ match }: { match: Match }) {
       )}
       {['open', 'full', 'started'].includes(match.status) &&
         (game?.lobby === 'friend_tags' ? (
-          <FriendTags match={match} uid={uid} isPlayer={isPlayer} />
+          <FriendTags match={match} priv={priv} uid={uid} isPlayer={isPlayer} />
         ) : (
-          <LobbyCode match={match} isHost={isHost} isPlayer={isPlayer} />
+          <LobbyCode match={match} priv={priv} isHost={isHost} isPlayer={isPlayer} />
         ))}
 
       <SectionTitle>Credits</SectionTitle>
@@ -329,9 +333,20 @@ function ShareCode({ code, expiresAt }: { code: string; expiresAt?: number }) {
 
 // Clash Royale has no lobby code: players add each other as friends with their
 // player tags, then start a Friendly Battle.
-function FriendTags({ match, uid, isPlayer }: { match: Match; uid: string; isPlayer: boolean }) {
+function FriendTags({
+  match,
+  priv,
+  uid,
+  isPlayer,
+}: {
+  match: Match;
+  priv: MatchPrivate | null;
+  uid: string;
+  isPlayer: boolean;
+}) {
   const [copied, setCopied] = useState<string | null>(null);
   if (!isPlayer) return null;
+  const tagOf = (p: Match['players'][number]) => gameIdOf(p, priv);
   async function copy(tag: string) {
     await Clipboard.setStringAsync(tag);
     setCopied(tag);
@@ -347,15 +362,15 @@ function FriendTags({ match, uid, isPlayer }: { match: Match; uid: string; isPla
               {p.uid === uid ? ' (you)' : ''}
             </Text>
             <Text style={styles.code} selectable>
-              {p.gameId}
+              {tagOf(p) || '…'}
             </Text>
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Copy ${p.gamerTag}'s player tag`}
-            onPress={() => copy(p.gameId)}
+            onPress={() => copy(tagOf(p))}
             style={styles.copy}>
-            <Text style={styles.copyText}>{copied === p.gameId ? 'Copied' : 'Copy'}</Text>
+            <Text style={styles.copyText}>{copied === tagOf(p) ? 'Copied' : 'Copy'}</Text>
           </Pressable>
         </View>
       ))}
@@ -370,21 +385,24 @@ function FriendTags({ match, uid, isPlayer }: { match: Match; uid: string; isPla
 
 function LobbyCode({
   match,
+  priv,
   isHost,
   isPlayer,
 }: {
   match: Match;
+  priv: MatchPrivate | null;
   isHost: boolean;
   isPlayer: boolean;
 }) {
-  const [value, setValue] = useState(match.lobbyCode ?? '');
+  const lobbyCode = priv?.lobbyCode ?? null;
+  const [value, setValue] = useState(lobbyCode ?? '');
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
 
   useEffect(() => {
-    if (!editing) setValue(match.lobbyCode ?? '');
-  }, [match.lobbyCode, editing]);
+    if (!editing) setValue(lobbyCode ?? '');
+  }, [lobbyCode, editing]);
 
   async function save() {
     setBusy(true);
@@ -406,7 +424,7 @@ function LobbyCode({
   return (
     <Card style={styles.card}>
       <Text style={styles.label}>In-game lobby code</Text>
-      {canEdit && (editing || !match.lobbyCode) ? (
+      {canEdit && (editing || !lobbyCode) ? (
         <>
           <TextField
             label="Code from your game’s private lobby"
@@ -422,8 +440,8 @@ function LobbyCode({
         </>
       ) : (
         <View style={styles.codeRow}>
-          <Text style={match.lobbyCode ? styles.code : styles.waiting} selectable>
-            {match.lobbyCode ?? 'The host hasn’t added it yet.'}
+          <Text style={lobbyCode ? styles.code : styles.waiting} selectable>
+            {lobbyCode ?? 'The host hasn’t added it yet.'}
           </Text>
           {canEdit && (
             <Pressable

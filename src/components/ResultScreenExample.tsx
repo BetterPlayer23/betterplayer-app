@@ -2,13 +2,21 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { Game } from '@/constants/games';
 import { colors, fonts } from '@/constants/theme';
-import type { MatchPlayer } from '@/matches/types';
+import { gameIdOf, type MatchPlayer, type MatchPrivate } from '@/matches/types';
 
 // A drawn example of the screen to photograph for this game, using the
 // players' own game IDs (no publisher logos or artwork).
-export function ResultScreenExample({ game, players }: { game: Game; players: MatchPlayer[] }) {
+export function ResultScreenExample({
+  game,
+  players,
+  priv,
+}: {
+  game: Game;
+  players: MatchPlayer[];
+  priv?: MatchPrivate | null;
+}) {
   const [a, b] = players;
-  const name = (p?: MatchPlayer) => p?.gameId || p?.gamerTag || 'Player';
+  const name = (p?: MatchPlayer) => gameIdOf(p, priv) || p?.gamerTag || 'Player';
 
   let screen;
   if (game.resultKind === 'goals') {

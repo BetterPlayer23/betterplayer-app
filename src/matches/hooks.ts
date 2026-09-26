@@ -1,27 +1,13 @@
-import {
-  collection,
-  doc,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
-  type DocumentSnapshot,
-} from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
-import { useAuth } from '@/auth/AuthProvider';
 import { db } from '@/firebase';
 
-import { ACTIVE_STATUSES, type Match } from './types';
-
-type Live<T> = { data: T; loading: boolean; error: string | null };
+import { toMatch, type Live } from './live';
+import { useMatchLists } from './MatchesProvider';
+import { ACTIVE_STATUSES, type Match, type MatchPrivate } from './types';
 
 const LOAD_ERROR = 'Matches can’t be shown right now. Check your connection and try again.';
-
-function toMatch(snap: DocumentSnapshot): Match {
-  return { id: snap.id, ...(snap.data() as Omit<Match, 'id'>) };
-}
 
 // Re-render every 30 s so matches whose 15 minutes ran out disappear.
 function useNow(intervalMs = 30_000): number {
@@ -33,53 +19,21 @@ function useNow(intervalMs = 30_000): number {
   return now;
 }
 
-// Live list of open matches, newest first.
+// Open matches, newest first: the first `max` of the shared live list
+// (MatchesProvider), so Home and Matches share one Firestore listener.
 export function useOpenMatches(max = 30): Live<Match[]> {
-  const [state, setState] = useState<Live<Match[]>>({ data: [], loading: true, error: null });
+  const { open } = useMatchLists();
   const now = useNow();
-
-  useEffect(() => {
-    const q = query(
-      collection(db, 'matches'),
-      where('status', '==', 'open'),
-      orderBy('createdAt', 'desc'),
-      limit(max),
-    );
-    return onSnapshot(
-      q,
-      (snap) => setState({ data: snap.docs.map(toMatch), loading: false, error: null }),
-      () => setState((s) => ({ ...s, loading: false, error: LOAD_ERROR })),
-    );
-  }, [max]);
-
   // Expired matches are cancelled every 5 minutes; hide them straight away.
-  const data = state.data.filter((m) => !m.expiresAt || m.expiresAt.toMillis() > now);
-  return { ...state, data };
+  const data = open.data.filter((m) => !m.expiresAt || m.expiresAt.toMillis() > now).slice(0, max);
+  return { ...open, data };
 }
 
-// Live list of the signed-in player's recent matches, newest first.
+// The signed-in player's recent matches, newest first (shared listener).
 export function useMyMatches(max = 20): Live<Match[]> & { active: Match | null } {
-  const { user } = useAuth();
-  const uid = user?.uid;
-  const [state, setState] = useState<Live<Match[]>>({ data: [], loading: true, error: null });
-
-  useEffect(() => {
-    if (!uid) return;
-    const q = query(
-      collection(db, 'matches'),
-      where('playerUids', 'array-contains', uid),
-      orderBy('createdAt', 'desc'),
-      limit(max),
-    );
-    return onSnapshot(
-      q,
-      (snap) => setState({ data: snap.docs.map(toMatch), loading: false, error: null }),
-      () => setState((s) => ({ ...s, loading: false, error: LOAD_ERROR })),
-    );
-  }, [uid, max]);
-
-  const active = state.data.find((m) => ACTIVE_STATUSES.includes(m.status)) ?? null;
-  return { ...state, active };
+  const { mine } = useMatchLists();
+  const active = mine.data.find((m) => ACTIVE_STATUSES.includes(m.status)) ?? null;
+  return { ...mine, data: mine.data.slice(0, max), active };
 }
 
 // One match, live.
@@ -103,6 +57,31 @@ export function useMatch(id: string | undefined): Live<Match | null> {
     );
   }, [id]);
 
+  return state;
+}
+
+// matches/{id}/private/data: lobby code and game IDs, readable by the match's
+// players and admins only (so `enabled` should be false for everyone else).
+export function useMatchPrivate(id: string | undefined, enabled: boolean): Live<MatchPrivate | null> {
+  const [state, setState] = useState<Live<MatchPrivate | null>>({ data: null, loading: true, error: null });
+  useEffect(() => {
+    if (!id || !enabled) {
+      setState({ data: null, loading: false, error: null });
+      return;
+    }
+    return onSnapshot(
+      doc(db, 'matches', id, 'private', 'data'),
+      (snap) => {
+        const d = snap.data();
+        setState({
+          data: { lobbyCode: (d?.lobbyCode as string | null) ?? null, gameIds: (d?.gameIds as Record<string, string>) ?? {} },
+          loading: false,
+          error: null,
+        });
+      },
+      () => setState((s) => ({ ...s, loading: false, error: LOAD_ERROR })),
+    );
+  }, [id, enabled]);
   return state;
 }
 

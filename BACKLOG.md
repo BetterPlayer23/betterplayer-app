@@ -30,6 +30,44 @@ Goal: fewer taps from finishing a Friendly Battle to reporting it.
 - Camera: replace the system camera with `expo-camera` for the result photo
   (see "Results and review" in CLAUDE.md).
 
+## App Check (before TestFlight; planned)
+Stops scripts and other apps from calling our Cloud Functions, Firestore and
+Storage with the public Firebase config: only the real Betterplayer app (web on
+GitHub Pages, iOS build) gets a valid token. Email verification (built) limits
+fake accounts; App Check limits fake clients.
+
+Console steps you'll need (Firebase console → App Check):
+1. Web app: register the web app with **reCAPTCHA v3** (or reCAPTCHA Enterprise):
+   create the site key at google.com/recaptcha (domains `betterplayer23.github.io`
+   and `localhost`), paste it in the console and copy it into the app
+   (`src/firebase/appCheck.ts`, public like the rest of the web config).
+2. iOS app: register the iOS app (bundle `com.betterplayer`) with **App Attest**;
+   needs the App Store team ID in the console and the `expo-build-properties` /
+   EAS build (a native build; not needed for the web preview).
+3. Debug tokens: in App Check → Apps → ⋮ → "Manage debug tokens", add one for
+   the emulator/browser tests, set `FIREBASE_APPCHECK_DEBUG_TOKEN` there.
+4. Enforcement: switch on "Enforce" for **Cloud Functions**, **Firestore** and
+   **Storage** only after the metrics tab shows ~100% verified requests for a few
+   days (unenforced first, so nobody gets locked out).
+Code side: `initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true })`
+in the app; `enforceAppCheck: true` on every callable in `functions/src/index.ts`
+(keep it off in the emulator).
+
+## Smaller clean-ups (later)
+- **Bundle trim** (~15% of the web JS): replace `react-native-reanimated` (only the
+  pulsing dot uses it) with React Native's built-in `Animated`; `expo-symbols`
+  (two icons) with a small SVG; drop unused deps `expo-web-browser`,
+  `expo-constants`, `expo-linking`.
+- **One match type**: `src/matches/types.ts` and `functions/src/matches/common.ts`
+  both describe a match; derive one from a shared type in `functions/src/shared`.
+  Delete dead code: `primaryGlow`, `fonts.headingHeavy`, the `stake_returned` label,
+  `src/matches/format.ts` (a pure re-export).
+- **Lint**: add `eslint-config-expo` so `npx expo lint` works (AGENTS.md asks for it).
+- **`rebuild-stats` memory**: it loads every completed match at once; fine for the
+  beta, page it (by `settledAt`) before ~100k matches.
+- **Storage rules**: `match_(matchId)` is called three times per upload check (the
+  rules engine deduplicates it); one helper would read better.
+
 ## Server
 - Clash Royale results from the official battle log (`GET /players/{tag}/battlelog`):
   find the Friendly Battle against the opponent's tag after `startedAt`. Needs a

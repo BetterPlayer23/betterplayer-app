@@ -2,12 +2,14 @@
  * One-off data jobs (run from GitHub Actions → "Maintenance", or a terminal):
  *   node lib/scripts/maintenance.js migrate-platforms [--apply]
  *   node lib/scripts/maintenance.js rebuild-stats [--apply]
+ *   node lib/scripts/maintenance.js backfill-image-hashes [--apply]
+ *   node lib/scripts/maintenance.js migrate-private [--apply]
  * Without --apply it only previews and changes nothing. Prints counts only.
  */
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-import { migratePlatforms, rebuildStats } from '../maintenance';
+import { backfillImageHashes, migratePlatforms, migratePrivate, rebuildStats } from '../maintenance';
 import { safeError } from '../safeLog';
 
 const PROJECT_ID = process.env.GCLOUD_PROJECT ?? 'betterplayer-beta';
@@ -25,8 +27,14 @@ async function main() {
   } else if (task === 'rebuild-stats') {
     const r = await rebuildStats(db, apply);
     console.log(`Stats rebuilt from ${r.matches} settled matches for ${r.players} players (${mode})`);
+  } else if (task === 'backfill-image-hashes') {
+    const n = await backfillImageHashes(db, apply);
+    console.log(`Image hashes given search pieces: ${n} (${mode})`);
+  } else if (task === 'migrate-private') {
+    const n = await migratePrivate(db, apply);
+    console.log(`Matches with lobby code / game IDs moved to private data: ${n} (${mode})`);
   } else {
-    console.log('Choose migrate-platforms or rebuild-stats.');
+    console.log('Choose migrate-platforms, rebuild-stats, backfill-image-hashes or migrate-private.');
     process.exit(1);
   }
 }

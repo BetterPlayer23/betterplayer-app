@@ -1,6 +1,5 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
-import nodemailer from 'nodemailer';
 
 import { REVIEW_REASON_LABELS, describeOutcome, describeResult, winnersOf } from '../shared/games';
 import { registerSecret } from '../safeLog';
@@ -74,6 +73,8 @@ export async function sendReviewAlert(
   const dispute = disputes.docs[0]?.data() as DisputeDoc | undefined;
   const email = buildAlert(match, report, dispute);
 
+  // Loaded here, not at start-up, so the other functions don't pay for it.
+  const nodemailer = (await import('nodemailer')).default;
   // In the emulator nothing is really sent: the message is only built.
   const transport =
     process.env.FUNCTIONS_EMULATOR === 'true'

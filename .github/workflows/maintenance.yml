@@ -4,6 +4,8 @@ name: Maintenance
 # what would change). Prints counts only.
 # - migrate-platforms: users' single "platform" becomes the list "platforms".
 # - rebuild-stats: rebuilds player stats from every settled match.
+# - backfill-image-hashes: adds search pieces to old image fingerprints.
+# - migrate-private: moves old matches' lobby code and game IDs to private data.
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +13,7 @@ on:
         description: 'Job to run'
         required: true
         type: choice
-        options: [migrate-platforms, rebuild-stats]
+        options: [migrate-platforms, rebuild-stats, backfill-image-hashes, migrate-private]
       apply:
         description: 'Apply the changes (otherwise preview only)'
         type: boolean

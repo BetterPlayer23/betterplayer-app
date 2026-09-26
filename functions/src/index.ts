@@ -12,7 +12,7 @@ import * as admin from './matches/admin';
 import { sendReviewAlert } from './matches/alerts';
 import type { MatchDoc } from './matches/common';
 import * as results from './matches/results';
-import { requireUid } from './matches/common';
+import { requireUid, requireVerifiedEmail } from './matches/common';
 import { acceptRules as acceptRulesAction } from './rules';
 import { guardBackground, guardCallable, registerSecret } from './safeLog';
 import { grantStarterCredits } from './starterGrant';
@@ -50,14 +50,16 @@ type Action = (
   data: Record<string, unknown> | undefined,
 ) => Promise<unknown>;
 
-const callable = (action: Action, options: CallableOptions = {}) =>
+// `verified`: the player's email must be verified (entering matches).
+const callable = (action: Action, options: CallableOptions = {}, verified = false) =>
   onCall(options, async (request: CallableRequest<Record<string, unknown> | undefined>) => {
     const uid = requireUid(request.auth);
+    if (verified) requireVerifiedEmail(request.auth);
     return guardCallable(action.name, () => action(getFirestore(), uid, request.data));
   });
 
-export const createMatch = callable(matches.createMatch);
-export const joinMatch = callable(matches.joinMatch);
+export const createMatch = callable(matches.createMatch, {}, true);
+export const joinMatch = callable(matches.joinMatch, {}, true);
 export const leaveMatch = callable(matches.leaveMatch);
 export const setLobbyCode = callable(matches.setLobbyCode);
 export const startMatch = callable(matches.startMatch);
@@ -68,9 +70,13 @@ export const cancelMatch = callable(matches.cancelMatch);
 // (Firebase secret), never in code.
 const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
 
+// Photo checks (sharp + the vision API) are CPU-heavy and slow: fewer requests
+// per instance, more memory, and more instances than the light functions.
+const photoOptions: CallableOptions = { memory: '1GiB', cpu: 1, concurrency: 8, maxInstances: 30 };
+
 // Reporting a result runs the automatic check (Claude vision) on the screenshot.
 export const submitResult = onCall(
-  { secrets: [anthropicApiKey], timeoutSeconds: 120, memory: '512MiB' },
+  { ...photoOptions, secrets: [anthropicApiKey], timeoutSeconds: 120 },
   async (request: CallableRequest<Record<string, unknown> | undefined>) => {
     const uid = requireUid(request.auth);
     const apiKey = anthropicApiKey.value();
@@ -81,8 +87,8 @@ export const submitResult = onCall(
   },
 );
 export const confirmResult = callable(results.confirmResult);
-// Dispute photos are checked for duplicates, which needs more memory.
-export const disputeResult = callable(results.disputeResult, { memory: '512MiB' });
+// Dispute photos are checked for duplicates too.
+export const disputeResult = callable(results.disputeResult, photoOptions);
 export const adminDecide = callable(admin.adminDecide);
 export const reverseAutoDecision = callable(admin.reverseAutoDecision);
 
