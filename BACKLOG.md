@@ -26,6 +26,25 @@ Goal: fewer taps from finishing a Friendly Battle to reporting it.
    - Not possible on the web preview (a web page can't browse the photo
      library), so the web keeps the current buttons.
 
+### Open email links in the app (universal links)
+Today the links in our emails (verify email, reset password, undo an email change)
+open `https://betterplayer23.github.io/betterplayer-app/auth/action` in the browser,
+even when the iPhone app is installed. With **universal links**, iOS opens them
+directly in the installed app (the same `/auth/action` screen), and in the browser
+only when the app isn't installed.
+- Needs **our own domain** (e.g. `betterplayer.app`): Apple checks a file at
+  `https://<domain>/.well-known/apple-app-site-association`, which we can't publish
+  at the root of `betterplayer23.github.io` (it belongs to the GitHub account, and
+  GitHub Pages serves our site under `/betterplayer-app/`).
+- Steps: buy the domain; point it at GitHub Pages (custom domain, HTTPS on) or
+  Firebase Hosting; publish `apple-app-site-association` listing the app ID
+  (`<TeamID>.com.betterplayer`) and the path `/auth/action*`; add
+  `ios.associatedDomains: ["applinks:<domain>"]` in `app.json` (then an EAS build);
+  add the domain to Firebase Auth → Settings → Authorized domains; change
+  "Customize action URL" to `https://<domain>/auth/action`; move the web preview's
+  `baseUrl` from `/betterplayer-app` to `/`.
+- Test on a real iPhone: long-press a link in Mail → "Open in Betterplayer".
+
 ### Other native items
 - Camera: replace the system camera with `expo-camera` for the result photo
   (see "Results and review" in CLAUDE.md).

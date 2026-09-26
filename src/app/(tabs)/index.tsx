@@ -1,7 +1,10 @@
 import { router } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { clearFlash, useFlash } from '@/auth/verification';
 import { Button } from '@/components/Button';
+import { FormMessage } from '@/components/FormMessage';
 import { EmptyState } from '@/components/EmptyState';
 import { MatchCard } from '@/components/MatchCard';
 import { MatchList } from '@/components/MatchList';
@@ -23,9 +26,17 @@ export default function HomeScreen() {
   const credits = (n: number) => (wallet.loading ? '…' : formatCredits(n));
   const mine = useMyMatches(10);
   const open = useOpenMatches(5);
+  // A short message from the previous screen, e.g. "Email verified".
+  const flash = useFlash();
+  useEffect(() => {
+    if (!flash) return;
+    const id = setTimeout(clearFlash, 6000);
+    return () => clearTimeout(id);
+  }, [flash]);
 
   return (
     <Screen>
+      {flash && <FormMessage kind="success" text={flash} />}
       <View style={styles.greeting}>
         <Text style={styles.hello}>
           Hi, <Text style={styles.tag}>{profile?.gamerTag ?? 'Player'}</Text>

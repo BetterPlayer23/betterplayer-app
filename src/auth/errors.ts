@@ -15,6 +15,12 @@ export function friendlyError(error: unknown): string {
       return 'That email doesn’t look right. Check for typos.';
     case 'auth/weak-password':
       return 'Password must be at least 8 characters.';
+    case 'auth/expired-action-code':
+      return 'This link has expired. Ask for a new one below.';
+    case 'auth/invalid-action-code':
+      return 'This link was already used or isn’t valid any more. Ask for a new one below.';
+    case 'auth/user-disabled':
+      return 'This account has been switched off. Email Better.player.one@gmail.com for help.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a few minutes and try again.';
     case 'auth/network-request-failed':

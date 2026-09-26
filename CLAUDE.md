@@ -157,9 +157,20 @@ Players must be **18+** and in **Spain**.
 
 - Email and password sign-in (Firebase Auth). Users stay signed in.
 - **Email verification**: sign-up sends a verification link; while `emailVerified` is
-  false the app shows `src/app/verify-email.tsx` (`AuthStatus` `needsEmail`: "I've
-  clicked the link" reloads the user, "Send the email again"). Existing players see it
-  once at their next login. `createMatch` and `joinMatch` refuse an unverified email
+  false the app shows `src/app/verify-email.tsx` (`AuthStatus` `needsEmail`). No button
+  to confirm: it reloads the user every 5 s and when the app/tab comes back into focus
+  (`checkVerified`), and moves on by itself; "Resend email" has a 60 s cooldown
+  (`useResendCooldown` in `src/auth/verification.ts`). Existing players see it once at
+  their next login.
+- **Email action links** (`src/app/auth/action.tsx`, `/auth/action?mode=…&oobCode=…`,
+  outside the sign-in gates): Firebase's emails link here once the console's
+  "Customize action URL" is set to `https://betterplayer23.github.io/betterplayer-app/auth/action`.
+  `verifyEmail` applies the code and goes straight to Home (or the next gate) with a
+  short "Email verified" message (`setFlash` / `useFlash`); signed out → "Log in".
+  `resetPassword` shows a new-password form (`confirmPasswordReset`). `recoverEmail`
+  undoes an email change and offers a password reset. Expired / used / incomplete links
+  show a plain error and a way to get a new link. Results are kept per code so the page
+  survives the brief loading screen after verifying. `createMatch` and `joinMatch` refuse an unverified email
   (`requireVerifiedEmail`, `request.auth.token.email_verified`). Emulator tests mark
   users verified with the Admin SDK (`updateUser(uid, { emailVerified: true })`).
 - The tabs are only reachable when signed in (`Stack.Protected` in `src/app/_layout.tsx`).

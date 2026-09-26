@@ -16,6 +16,7 @@ import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '@/firebase';
 
 import type { GameIds, PlatformId, Profile } from './profile';
+import { markVerificationSent } from './verification';
 
 // loading:      still finding out who is signed in
 // signedOut:    show Sign up / Log in
@@ -72,8 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [creating, setCreating] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
-  // Bumped after user.reload() so the status is worked out again.
-  const [verifiedTick, setVerifiedTick] = useState(0);
+  // Bumped when user.reload() finds the email verified, so the status is
+  // worked out again (reload() changes the same user object in place).
+  const [, setVerifiedTick] = useState(0);
 
   // Firebase keeps the session, so this fires with the saved user on launch.
   useEffect(() => onAuthStateChanged(auth, setUser), []);
@@ -95,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       () => setProfileError(true),
     );
-  }, [user, attempt, emailVerified, verifiedTick]);
+  }, [user, attempt, emailVerified]);
 
   // Is this player a Betterplayer admin? (Shows the Admin tab.)
   // If the read is refused (e.g. the live rules don't allow it yet), try again
@@ -160,7 +162,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
         await createProfile(gamerTag, platforms);
         // The verification link; the player can ask for it again on the next screen.
-        await sendEmailVerification(cred.user).catch(() => undefined);
+        await sendEmailVerification(cred.user)
+          .then(() => markVerificationSent())
+          .catch(() => undefined);
       } finally {
         setCreating(false);
       }
@@ -169,15 +173,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const current = auth.currentUser;
       if (!current) throw new Error('Not signed in');
       await sendEmailVerification(current);
+      markVerificationSent();
     },
     async checkVerified() {
       const current = auth.currentUser;
       if (!current) return false;
-      await current.reload();
-      // A fresh ID token, so Cloud Functions see email_verified straight away.
-      if (current.emailVerified) await current.getIdToken(true);
+      if (current.emailVerified) return true;
+      await current.reload(); // asks Firebase for the latest account state
+      if (!current.emailVerified) return false;
+      // A fresh ID token, so Cloud Functions see email_verified straight away,
+      // then work the status out again (the app moves on by itself).
+      await current.getIdToken(true);
       setVerifiedTick((n) => n + 1);
-      return current.emailVerified;
+      return true;
     },
     createProfile,
     async acceptRules() {

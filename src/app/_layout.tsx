@@ -151,6 +151,12 @@ function RootNavigator() {
           options={{ headerShown: true, header: () => <AppHeader /> }}
         />
       </Stack.Protected>
+      {/* Links from Firebase's emails (verify email, reset password, undo an
+          email change): open whether signed in or not. */}
+      <Stack.Screen
+        name="auth/action"
+        options={{ headerShown: true, header: () => <AppHeader /> }}
+      />
       {/* Readable by everyone: from Profile and from the Sign up screen. */}
       <Stack.Screen
         name="beta-rules"
