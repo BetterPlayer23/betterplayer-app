@@ -207,6 +207,8 @@ const HINTS: Record<string, string> = {
     'Call of Duty: Warzone (Rebirth Island) end-of-match squad scoreboard. Read each squad member’s name, eliminations (kills) and damage.',
   fortnite:
     'Fortnite end-of-match squad scoreboard or squad stats screen. Read each squad member’s name, eliminations and damage dealt.',
+  'bf-redsec':
+    'Battlefield REDSEC (battle royale) end-of-match squad scoreboard. Read each squad member’s name, eliminations (kills) and damage.',
 };
 
 const SCORE_WORD: Record<GameConfig['resultKind'], string> = {

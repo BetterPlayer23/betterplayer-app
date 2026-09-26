@@ -25,6 +25,7 @@ import { FormMessage } from '@/components/FormMessage';
 import { MultiChipSelect } from '@/components/MultiChipSelect';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { StatsCard } from '@/components/StatsCard';
+import { BadgeShowcase } from '@/components/BadgeShowcase';
 import { TextField } from '@/components/TextField';
 import { colors, fonts } from '@/constants/theme';
 
@@ -163,6 +164,9 @@ export default function ProfileScreen() {
 
       <SectionTitle>Stats</SectionTitle>
       <StatsCard uid={user.uid} />
+
+      <SectionTitle>Badges</SectionTitle>
+      <BadgeShowcase uid={user.uid} mine />
 
       <SectionTitle>Platforms</SectionTitle>
       <Card style={styles.card}>

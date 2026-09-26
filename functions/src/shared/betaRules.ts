@@ -3,9 +3,9 @@
 // To change the rules: edit the text AND bump BETA_RULES_VERSION, so every
 // player is asked to accept the new version once.
 
-export const BETA_RULES_VERSION = 'v6';
+export const BETA_RULES_VERSION = 'v7';
 
-export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v6)';
+export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v7)';
 
 export const BETA_RULES_CONTACT_EMAIL = 'Better.player.one@gmail.com';
 
@@ -20,7 +20,7 @@ export const BETA_RULES: readonly { title: string; text: string }[] = [
   },
   {
     title: 'Games and winners',
-    text: 'Every player enters 2 credits. Betterplayer keeps a 10% fee from the pot and the winner gets the other 90%; on a tie it is split equally. EA FC: 1v1, a draw is decided on penalties. Fortnite and Warzone: 2 to 4 Betterplayer players in the same squad; the most eliminations wins, a tie on eliminations goes to the most damage, and players still tied share the credits. Clash Royale: 1v1 Friendly Battle between friends; the most crowns wins and a draw is refunded.',
+    text: 'Every player enters 2 credits. Betterplayer keeps a 10% fee from the pot and the winner gets the other 90%; on a tie it is split equally. EA FC: 1v1, a draw is decided on penalties. Fortnite, Warzone and Battlefield REDSEC: 2 to 4 Betterplayer players in the same squad; the most eliminations wins, a tie on eliminations goes to the most damage, and players still tied share the credits. Clash Royale: 1v1 Friendly Battle between friends; the most crowns wins and a draw is refunded. Badges, ranks, leaderboards and trophies are just for fun: they cannot be transferred and have no cash value.',
   },
   {
     title: 'Fair play',

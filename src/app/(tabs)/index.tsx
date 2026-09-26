@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MatchCard } from '@/components/MatchCard';
 import { MatchList } from '@/components/MatchList';
 import { GameTile } from '@/components/GameTile';
+import { LeaderboardCard } from '@/components/LeaderboardCard';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/auth/AuthProvider';
@@ -20,7 +21,7 @@ import { useReputation } from '@/wallet/useReputation';
 import { useWallet } from '@/wallet/useWallet';
 
 export default function HomeScreen() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const wallet = useWallet();
   const reputation = useReputation();
   const credits = (n: number) => (wallet.loading ? '…' : formatCredits(n));
@@ -86,6 +87,8 @@ export default function HomeScreen() {
           message="When you create or join a match, it will show up here."
         />
       )}
+
+      {user && <LeaderboardCard uid={user.uid} />}
 
       <SectionTitle>Open matches</SectionTitle>
       <MatchList

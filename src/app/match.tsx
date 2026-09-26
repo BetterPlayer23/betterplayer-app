@@ -13,6 +13,7 @@ import {
 } from '@shared/games';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { BadgeChip } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
@@ -209,6 +210,7 @@ function Room({ match }: { match: Match }) {
                 {p.uid === uid ? ' (you)' : ''}
                 <Text style={styles.statsLink}> · stats ›</Text>
               </Text>
+              {p.chip && <BadgeChip kind={p.chip.kind} label={p.chip.label} />}
               {!!gameIdOf(p, priv) && (
                 <Text style={styles.playerId}>
                   {game?.gameIdLabel}: {gameIdOf(p, priv)}

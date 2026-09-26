@@ -18,12 +18,14 @@ import {
   type Verification,
 } from '../shared/games';
 import { BETA_RULES_VERSION } from '../shared/betaRules';
+import { chipFor, seasonOf, type Chip, type PlayerBadges } from '../shared/badges';
 
 export type MatchPlayer = {
   uid: string;
   gamerTag: string; // snapshot at join time
   gameId?: string; // only on matches created before game IDs moved to private/data
   joinedAt: Timestamp;
+  chip?: Chip | null; // the player's best badge when they joined (shown next to the name)
 };
 
 // matches/{id}/private/data: what only the players of the match (and admins)
@@ -165,6 +167,7 @@ export type EligiblePlayer = {
   uid: string;
   gamerTag: string;
   gameId: string;
+  chip: Chip | null;
   dailyRef: DocumentReference;
 };
 
@@ -183,10 +186,11 @@ export async function checkEligible(
   now: Date,
 ): Promise<EligiblePlayer> {
   const dailyRef = db.collection('dailyCounts').doc(`${uid}_${madridDay(now)}`);
-  const [profile, wallet, daily] = await Promise.all([
+  const [profile, wallet, daily, badges] = await Promise.all([
     tx.get(db.collection('users').doc(uid)),
     tx.get(db.collection('wallets').doc(uid)),
     tx.get(dailyRef),
+    tx.get(db.collection('badges').doc(uid)),
   ]);
 
   if (!profile.exists) throw fail('failed-precondition', 'Finish your profile first.');
@@ -213,7 +217,13 @@ export async function checkEligible(
       { reason: 'daily_limit' },
     );
   }
-  return { uid, gamerTag: String(profile.get('gamerTag') ?? 'Player'), gameId, dailyRef };
+  return {
+    uid,
+    gamerTag: String(profile.get('gamerTag') ?? 'Player'),
+    gameId,
+    chip: chipFor(badges.data() as PlayerBadges | undefined, seasonOf(now)),
+    dailyRef,
+  };
 }
 
 export function countTodaysMatch(tx: Transaction, player: EligiblePlayer, now: Date) {

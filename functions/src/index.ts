@@ -14,6 +14,8 @@ import type { MatchDoc } from './matches/common';
 import * as results from './matches/results';
 import { requireUid, requireVerifiedEmail } from './matches/common';
 import * as authEmails from './authEmails';
+import * as boards from './leaderboards';
+import { previousSeason, seasonOf } from './shared/badges';
 import { acceptRules as acceptRulesAction } from './rules';
 import { guardBackground, guardCallable, registerSecret } from './safeLog';
 import { grantStarterCredits } from './starterGrant';
@@ -160,5 +162,42 @@ export const alertAdminOnReview = onDocumentUpdated(
       registerSecret(password);
       const result = await sendReviewAlert(getFirestore(), event.params.matchId, after, password);
       logger.info('Review alert', { matchId: event.params.matchId, result });
+    }),
+);
+
+// ---- Badges, leaderboards, crowns (./leaderboards.ts)
+
+// Every settled match (admin decision or automatic approval) and every reversal
+// writes admin_reviews/{id}: count it in the season stats, leaderboards, tiers
+// and crowns. Retried on failure; a second run does nothing.
+export const onMatchDecided = onDocumentCreated(
+  { document: 'admin_reviews/{reviewId}', retry: true },
+  (event) =>
+    guardBackground(
+      'onMatchDecided',
+      async () => {
+        const result = await boards.applyReview(getFirestore(), event.params.reviewId);
+        logger.info('Leaderboards updated', { reviewId: event.params.reviewId, result });
+      },
+      true,
+    ),
+);
+
+// Founder badge: called by the app once the player's email is verified.
+const claimFounderAction: Action = (db, uid) => boards.claimFounder(db, uid);
+export const claimFounder = callable(claimFounderAction, {}, true);
+
+// Admins: mark a suspicious-pattern flag as reviewed.
+export const dismissFlag = callable(boards.dismissFlag);
+
+// 00:10 on the 1st of each month (Spain): close last month's season and give
+// every Prism holder a permanent trophy.
+export const closeSeasons = onSchedule(
+  { schedule: '10 0 1 * *', timeZone: 'Europe/Madrid' },
+  () =>
+    guardBackground('closeSeasons', async () => {
+      const season = previousSeason(seasonOf(new Date()));
+      const trophies = await boards.closeSeason(getFirestore(), season);
+      logger.info('Season closed', { season, trophies });
     }),
 );

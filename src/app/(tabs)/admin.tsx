@@ -4,6 +4,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { AdminReviewCard } from '@/components/AdminReviewCard';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { FlagsList } from '@/components/FlagsList';
 import { FormMessage } from '@/components/FormMessage';
 import { PastDecisionRow } from '@/components/PastDecisionRow';
 import { Screen, SectionTitle } from '@/components/Screen';
@@ -38,6 +39,12 @@ export default function AdminScreen() {
       ) : (
         queue.data.map((m) => <AdminReviewCard key={m.id} match={m} />)
       )}
+
+      <SectionTitle>Suspicious patterns</SectionTitle>
+      <Text style={styles.help}>
+        Possible leaderboard farming. The same two players count at most 3 matches a day.
+      </Text>
+      <FlagsList />
 
       <SectionTitle>Past decisions</SectionTitle>
       {past.error ? (

@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { matchFormat } from '@shared/games';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { BadgeChip } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { PulseDot } from '@/components/PulseDot';
@@ -46,6 +47,8 @@ export function MatchCard({ match, variant = 'compact' }: { match: Match; varian
       setBusy(false);
     }
   }
+
+  const hostChip = match.players.find((p) => p.uid === match.hostUid)?.chip;
 
   if (variant === 'active') {
     const rivals = match.players.filter((p) => p.uid !== user?.uid).map((p) => p.gamerTag);
@@ -98,6 +101,7 @@ export function MatchCard({ match, variant = 'compact' }: { match: Match; varian
             {formatLabel(match)} · Host <Text style={styles.metaStrong}>{match.hostGamerTag}</Text>{' '}
             · {match.players.length}/{match.maxPlayers}
           </Text>
+          {hostChip && <BadgeChip kind={hostChip.kind} label={hostChip.label} />}
         </Pressable>
         <View style={styles.side}>
           <StatusPill status={match.status} />

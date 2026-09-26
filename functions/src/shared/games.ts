@@ -2,7 +2,7 @@
 // the app (imported as '@shared/games'). Keep this file free of imports so it
 // works in both.
 
-export type GameId = 'eafc' | 'clash-royale' | 'warzone-rebirth' | 'fortnite';
+export type GameId = 'eafc' | 'clash-royale' | 'warzone-rebirth' | 'fortnite' | 'bf-redsec';
 export type GameIdKey = 'eaId' | 'clashRoyaleTag' | 'activisionId' | 'epicName';
 // How a result is reported: goals (+ penalties if level), crowns, or each
 // player's eliminations and damage. ('placement' only exists in old reports.)
@@ -89,6 +89,20 @@ export const GAMES: readonly GameConfig[] = [
     rules: SQUAD_RULES,
     gameIdKey: 'epicName',
     gameIdLabel: 'Epic display name',
+    resultKind: 'eliminations',
+    lobby: 'code',
+    capture: 'camera',
+    resultScreen: SQUAD_SCREEN,
+  },
+  {
+    id: 'bf-redsec',
+    name: 'Battlefield REDSEC',
+    minPlayers: 2,
+    maxPlayers: 4,
+    tile: 'Squad 2–4 · Most eliminations wins the pot',
+    rules: SQUAD_RULES,
+    gameIdKey: 'eaId', // the same EA ID as EA FC
+    gameIdLabel: 'EA ID',
     resultKind: 'eliminations',
     lobby: 'code',
     capture: 'camera',

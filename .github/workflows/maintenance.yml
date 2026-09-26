@@ -6,6 +6,7 @@ name: Maintenance
 # - rebuild-stats: rebuilds player stats from every settled match.
 # - backfill-image-hashes: adds search pieces to old image fingerprints.
 # - migrate-private: moves old matches' lobby code and game IDs to private data.
+# - assign-founders: numbers the first 100 verified players (Founder badge).
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +14,7 @@ on:
         description: 'Job to run'
         required: true
         type: choice
-        options: [migrate-platforms, rebuild-stats, backfill-image-hashes, migrate-private]
+        options: [migrate-platforms, rebuild-stats, backfill-image-hashes, migrate-private, assign-founders]
       apply:
         description: 'Apply the changes (otherwise preview only)'
         type: boolean

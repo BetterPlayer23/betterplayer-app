@@ -66,6 +66,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const ADMIN_RETRY_MS = 30_000;
+const founderAsked = new Set<string>();
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   // undefined = not known yet
@@ -138,6 +139,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   else if (!profile) status = 'needsProfile';
   else if (profile.acceptedRulesVersion !== BETA_RULES_VERSION) status = 'needsRules';
   else status = 'signedIn';
+
+  // Founder badge: the first 100 players with a verified email. Asked once per
+  // session; the server answers the same if it was already given (or full).
+  const founderUid = status === 'signedIn' ? user?.uid : undefined;
+  useEffect(() => {
+    if (!founderUid || founderAsked.has(founderUid)) return;
+    founderAsked.add(founderUid);
+    httpsCallable(functions, 'claimFounder')({}).catch(() => founderAsked.delete(founderUid));
+  }, [founderUid]);
 
   // Our own verification email (link to the in-app page /auth/action), sent by
   // a Cloud Function. If our email is switched off (no Gmail password yet),

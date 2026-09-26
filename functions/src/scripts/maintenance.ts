@@ -4,12 +4,19 @@
  *   node lib/scripts/maintenance.js rebuild-stats [--apply]
  *   node lib/scripts/maintenance.js backfill-image-hashes [--apply]
  *   node lib/scripts/maintenance.js migrate-private [--apply]
+ *   node lib/scripts/maintenance.js assign-founders [--apply]
  * Without --apply it only previews and changes nothing. Prints counts only.
  */
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-import { backfillImageHashes, migratePlatforms, migratePrivate, rebuildStats } from '../maintenance';
+import {
+  assignFounders,
+  backfillImageHashes,
+  migratePlatforms,
+  migratePrivate,
+  rebuildStats,
+} from '../maintenance';
 import { safeError } from '../safeLog';
 
 const PROJECT_ID = process.env.GCLOUD_PROJECT ?? 'betterplayer-beta';
@@ -33,8 +40,13 @@ async function main() {
   } else if (task === 'migrate-private') {
     const n = await migratePrivate(db, apply);
     console.log(`Matches with lobby code / game IDs moved to private data: ${n} (${mode})`);
+  } else if (task === 'assign-founders') {
+    const r = await assignFounders(db, apply);
+    console.log(
+      `Verified players: ${r.verified}. Founder numbers given: ${r.assigned}. Already founders: ${r.already} (${mode})`,
+    );
   } else {
-    console.log('Choose migrate-platforms, rebuild-stats, backfill-image-hashes or migrate-private.');
+    console.log('Choose migrate-platforms, rebuild-stats, backfill-image-hashes, migrate-private or assign-founders.');
     process.exit(1);
   }
 }

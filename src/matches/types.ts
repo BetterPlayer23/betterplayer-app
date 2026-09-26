@@ -1,5 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 
+import type { Chip } from '@shared/badges';
 import type { MatchStatus, ReviewReason, Verification } from '@shared/games';
 
 // matches/{id}, written only by Cloud Functions (functions/src/matches).
@@ -7,6 +8,7 @@ export type MatchPlayer = {
   uid: string;
   gamerTag: string;
   gameId?: string; // only on matches created before game IDs moved to private data
+  chip?: Chip | null; // the player's badge when they joined (shown next to the name)
 };
 
 // matches/{id}/private/data: readable by the match's players and admins only.

@@ -22,7 +22,7 @@ export function platformsOf(p: { platforms?: string[]; platform?: string }): Pla
 
 // Per-game player IDs a player can add on their profile.
 export const gameIdFields = [
-  { key: 'eaId', label: 'EA ID', game: 'EA FC', placeholder: 'Your EA ID' },
+  { key: 'eaId', label: 'EA ID', game: 'EA FC · Battlefield REDSEC', placeholder: 'Your EA ID' },
   {
     key: 'activisionId',
     label: 'Activision ID',

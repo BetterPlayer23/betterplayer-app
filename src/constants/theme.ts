@@ -52,6 +52,21 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
+// ---- Badge tiers (src/components/Badge.tsx). `stops` = the gradient of the
+// outer ring and ribbon; `color` = text / chip colour (readable on dark).
+export const badgeColors = {
+  carbon: { stops: ['#9CA3AF', '#1F2937'], color: '#A3ABBE' },
+  cobalt: { stops: ['#93C5FD', '#1E3A8A'], color: '#93C5FD' },
+  gold: { stops: ['#FFF1B8', '#FFB020', '#B7791F'], color: '#FFB020' },
+  neon: { stops: ['#22D3EE', '#E040FB'], color: '#22D3EE' },
+  prism: { stops: ['#FF4D6D', '#FFB020', '#39FF88', '#22D3EE', '#E040FB'], color: '#F0A6FF' },
+  founder: { stops: ['#FFFFFF', '#22D3EE', '#E040FB'], color: '#E6E9F2' },
+  crown: { stops: ['#FFF1B8', '#FFB020', '#B7791F'], color: '#FFD166' },
+  // Inside of every badge: a dark radial fill.
+  fill: ['#1C2745', '#0E1120', '#05060B'],
+  ribbonText: '#05060B',
+} as const;
+
 // ---- Glow: a soft outer shadow in the element's own colour.
 // `boxShadow` works on iOS, Android and web. Never on body text.
 export const glow = {

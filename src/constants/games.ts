@@ -15,6 +15,7 @@ const colorsById: Record<GameId, string> = {
   'warzone-rebirth': '#F97316',
   fortnite: '#A855F7',
   'clash-royale': '#38BDF8',
+  'bf-redsec': '#F43F5E', // a rose red, clearly different from the danger red #FF4D6D
 };
 
 export const games: Game[] = GAMES.map((g) => ({

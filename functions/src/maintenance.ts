@@ -6,6 +6,7 @@ import { feeRateOf, splitWinnings, winnersOf } from './shared/games';
 import { statsForMatch, type GameStats, type StatsEntry } from './shared/stats';
 import { matchPrivateRef, type MatchDoc } from './matches/common';
 import { hashSegments } from './matches/vision';
+export { assignFounders } from './leaderboards';
 
 const PLATFORMS = ['pc', 'playstation', 'xbox', 'switch', 'mobile'];
 

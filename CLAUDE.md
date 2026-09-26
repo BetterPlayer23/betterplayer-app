@@ -40,7 +40,7 @@ Players must be **18+** and in **Spain**.
   pages, both in `functions/src/shared/games.ts`):
   - **EA FC**: 1v1. Draws are decided on penalties, so there is always a winner.
     Tile "1v1 · Draw decided on penalties".
-  - **Fortnite** and **Warzone Rebirth**: squad of 2–4 Betterplayer players in the
+  - **Fortnite**, **Warzone Rebirth** and **Battlefield REDSEC** (battle royale): squad of 2–4 Betterplayer players in the
     SAME in-game squad. Most eliminations wins; tie → most damage; still tied → the
     80% is split equally between the tied players. Report = eliminations + damage
     per player; proof = the end-of-match squad scoreboard.
@@ -49,7 +49,7 @@ Players must be **18+** and in **Spain**.
     is refunded (every entry back, no fee). No lobby code: the match room shows both
     players' Clash Royale tags with Copy buttons and how to add each other.
     Tile "1v1 · Friendly battle · Most crowns wins".
-- Proof capture (`capture` in shared games): EA FC, Fortnite, Warzone = camera only
+- Proof capture (`capture` in shared games): EA FC, Fortnite, Warzone, REDSEC = camera only
   (a console/PC screen); Clash Royale (played on the phone) = camera or a screenshot
   from the photo library. Duplicate and timing checks apply to both.
 - Every player gets **10 starter credits, once**.
@@ -104,6 +104,10 @@ Players must be **18+** and in **Spain**.
 - `src/wallet/` – live, read-only wallet and ledger data, credit formatting and labels.
   Wallet history is read 20 lines at a time ("Show more", up to 100). A negative
   available balance (an admin reversal after a payout) shows an explanation.
+- `src/badges/hooks.ts` – badges, leaderboards, "your position", notifications (read-only
+  except marking your own notifications read), `dismissFlag`. `src/components/Badge.tsx`
+  (`Badge`, `BadgeChip`), `BadgeShowcase`, `LeaderboardCard` (Home), `FlagsList` (Admin).
+  Screens `src/app/leaderboard.tsx` and `src/app/notifications.tsx` (no tab).
 - `src/matches/` – match types, live Firestore hooks, and `api.ts` (the only way the
   app changes matches: callable Cloud Functions). `MatchesProvider` keeps ONE live
   copy of "open matches" (30) and "my matches" (20) for the whole app; Home and
@@ -154,7 +158,8 @@ Players must be **18+** and in **Spain**.
 - `.github/workflows/maintenance.yml` – one-off data jobs run by hand, preview unless
   "apply" is ticked: `migrate-platforms`, `rebuild-stats`, `backfill-image-hashes`
   (adds `segments` to old image fingerprints), `migrate-private` (moves old matches'
-  lobby code and game IDs into `matches/{id}/private/data`). Prints counts only.
+  lobby code and game IDs into `matches/{id}/private/data`), `assign-founders` (numbers
+  the first 100 verified players, see Badges). Prints counts only.
 - `storage.lifecycle.json` – result photos are deleted 90 days after upload (the deploy
   workflow applies it to the bucket with `gcloud storage buckets update`). The image
   fingerprints in `imageHashes` are kept. The beta rules (section 7) say so.
@@ -213,7 +218,8 @@ Players must be **18+** and in **Spain**.
   profiles had a single `platform`, moved by the Maintenance job `migrate-platforms`;
   read with `platformsOf()`),
   `ageConfirmed: true`, `ageConfirmedAt`, `country: "ES"` (self-declared), `gameIds`
-  (`eaId`, `activisionId`, `epicName`, `clashRoyaleTag`), `createdAt`.
+  (`eaId`, `activisionId`, `epicName`, `clashRoyaleTag`; `eaId` is used by EA FC and
+  Battlefield REDSEC, labelled "EA ID · EA FC · Battlefield REDSEC"), `createdAt`.
 - **Never put credits or reputation in `users/{uid}`**: they are server-only.
 - The app may only change `gamerTag`, `gameIds` and `platforms` after sign-up (and
   remove the old `platform` field).
@@ -232,8 +238,9 @@ Players must be **18+** and in **Spain**.
   for existing players, once at next login; checkbox "I am 18+ and accept the beta
   rules"). Read-only `src/app/beta-rules.tsx`, linked from Profile and Sign up.
 - `createMatch` / `joinMatch` refuse players who haven't accepted the current version.
-- Current version: **v6**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
-  (the game rules above; 10% fee, winner 90%), 4 Fair play, 5 Review (checked
+- Current version: **v7**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
+  (the game rules above incl. REDSEC; 10% fee, winner 90%; badges, ranks, leaderboards
+  and trophies are for fun, not transferable, no cash value), 4 Fair play, 5 Review (checked
   automatically; unclear checks and disputes go to an admin, whose decision is
   final), 6 Beta, 7 Your data (controller "Betterplayer (Better.player.one@gmail.com)";
   stats visible to other players; screenshots checked by an AI system (Anthropic);
@@ -370,6 +377,50 @@ Players must be **18+** and in **Spain**.
 - Maintenance job `rebuild-stats` rebuilds all stats from settled matches
   (`functions/src/maintenance.ts`).
 - Phase 2 (external game stats) is planned in `BACKLOG.md`, not built.
+
+## Badges, leaderboards and seasons
+
+- Shared logic (import-free): `functions/src/shared/badges.ts` (tiers, seasons, stats,
+  board sorting, crowns, chips, anti-farming limits, notification texts). Server:
+  `functions/src/leaderboards.ts`. Badges have no cash value and can't be transferred.
+- **Seasons** = calendar months (Europe/Madrid); Season 1 = September 2026 (`LAUNCH_SEASON`).
+  `closeSeasons` (00:10 on the 1st) gives every #1–10 (Prism) of last month's boards a
+  permanent trophy "Season N · Prism · [game · stat]" + a notification; once per season
+  (`seasons/{season}`). Boards of a new month start empty.
+- **Boards** (per game and stat, only validated matches): Warzone/Fortnite/REDSEC
+  eliminations, damage, average eliminations (10+ matches); EA FC wins, goal difference;
+  Clash Royale wins, 3-crown wins. Squad numbers only count when the final winners equal
+  the report. Trigger `onMatchDecided` (on `admin_reviews/{id}` created: settlement or
+  reversal) runs `applyReview` in one transaction, once per review
+  (`leaderboardApplied/{id}`); a reversal takes the match's contribution out
+  (`leaderboardEntries/{matchId}`) and counts the corrected result.
+- Data: `leaderboards/{season}_{game}_{stat}` (ONE doc with the top 260, sorted; the app
+  shows 50), `seasonStats/{season}_{game}_{uid}` (totals; "your position" off the board =
+  one count query), `badges/{uid}` (founder, crowns, live `tiers` for `tiersSeason`,
+  `trophies`, `chip`), `records/{game}` (crowns), `notifications/{uid}/items` (owner reads,
+  may only set `read: true`). All readable by signed-in players (notifications: owner),
+  written only by functions. `flags` admins only; `pairDays`, `pairs`, `founderClaims`,
+  `meta`, `seasons`, `leaderboardEntries`, `leaderboardApplied` server-only.
+- **Tiers** (live): #1–10 Prism, #11–50 Neon, #51–250 Gold, otherwise Cobalt with 5+
+  matches this season, else Carbon. Dropping from Gold or better because someone passed
+  you → notification "[name] took your [tier] spot in [game · stat]. Win it back."
+- **Crowns** (all-time, one holder each): most eliminations / damage in one match (each
+  squad game), biggest EA FC win margin, longest Clash Royale win streak. A strictly
+  higher value takes it; the old holder is notified.
+- **Founder**: the first 100 verified players, numbered. The app calls `claimFounder` once
+  per session when signed in. Until the Maintenance job `assign-founders` has run (apply),
+  claims are only recorded; the job numbers existing verified players by when the app first
+  saw them verified, else by sign-up date (Firebase doesn't store the verification date).
+- **Chip** next to names: crown > Prism/Neon/Gold > Founder > Cobalt/Carbon
+  (`chipFor`). Saved on `match.players[].chip` when a player creates/joins a match.
+- **Anti-farming**: the same two players count on boards at most 3 matches a Madrid day
+  (`pairDays`); extra matches still settle credits normally. `flags/{matchId}` for the
+  Admin tab "Suspicious patterns" (over the daily cap, same winner 5× in a row, EA FC win
+  by 7+); `dismissFlag` (admins).
+- **Artwork** `src/components/Badge.tsx` (react-native-svg): hexagon 120×120, dark radial
+  fill, 4px tier-gradient ring, inner bevel, reflection, tint, ribbon; tier colours in
+  `badgeColors` (theme). Sizes large 104 / medium 44 / small 18 (chip). Prism sweeps a
+  shine every 2.6 s and shifts colour slowly, not with "reduce motion" and not in lists.
 
 ## Automatic result check (Claude vision)
 

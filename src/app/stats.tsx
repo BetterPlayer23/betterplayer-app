@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { winRate, type GameStats } from '@shared/stats';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { BadgeShowcase } from '@/components/BadgeShowcase';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen, SectionTitle } from '@/components/Screen';
@@ -29,6 +30,7 @@ export default function StatsScreen() {
         From settled Betterplayer matches. Skill rating starts at 1000 and goes up when you beat
         higher-rated players.
       </Text>
+      {uid && <BadgeShowcase uid={uid} mine={mine} />}
       {loading ? (
         <ActivityIndicator color={colors.accent} style={styles.loading} />
       ) : error ? (

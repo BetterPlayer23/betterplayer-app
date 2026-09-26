@@ -74,7 +74,7 @@ export async function createMatch(db: Firestore, uid: string, data: Data, now = 
       const money = matchMoney(maxPlayers, feeRate);
 
       const nowTs = Timestamp.fromDate(now);
-      const host: MatchPlayer = { uid, gamerTag: player.gamerTag, joinedAt: nowTs };
+      const host: MatchPlayer = { uid, gamerTag: player.gamerTag, joinedAt: nowTs, chip: player.chip };
       const match: MatchDoc = {
         game: game.id,
         gameName: game.name,
@@ -150,7 +150,10 @@ export async function joinMatch(db: Firestore, uid: string, data: Data, now = ne
     if (!game) throw fail('failed-precondition', 'This game is no longer available.');
 
     const player = await checkEligible(tx, db, uid, game, now);
-    const players = [...match.players, { uid, gamerTag: player.gamerTag, joinedAt: Timestamp.fromDate(now) }];
+    const players = [
+      ...match.players,
+      { uid, gamerTag: player.gamerTag, joinedAt: Timestamp.fromDate(now), chip: player.chip },
+    ];
     tx.update(ref, {
       players,
       playerUids: FieldValue.arrayUnion(uid),
