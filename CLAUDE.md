@@ -149,6 +149,13 @@ Players must be **18+** and in **Spain**.
   YES/NO whether they contain any of our secrets. Note: GitHub stars out every line
   of the `GCP_SA_KEY` secret, including lines that are just `{` or `}`, so an empty
   `{}` shows as `***` in Actions logs; that alone doesn't mean a secret leaked.
+- `.github/workflows/set-email-action-url.yml` – one-off, run by hand: sets the link in
+  Firebase's emails to `https://betterplayer23.github.io/betterplayer-app/auth/action`
+  through the Identity Toolkit Admin API (`projects.updateConfig`,
+  `notification.sendEmail.callbackUri`; the console failed to save it), adds the domain
+  to Authorized domains if missing, then reads both back. Prints only those values.
+  Needs `firebaseauth.configs.update` (Editor has it; otherwise add "Firebase
+  Authentication Admin" to `github-deploy`).
 - `.github/workflows/check-match.yml` – read-only, run by hand (two gamer tags): did the
   automatic check run on their latest match, what it returned, and warnings/errors in
   the `submitResult` logs. Prints no emails or in-game names (Actions logs may be public).
@@ -163,8 +170,8 @@ Players must be **18+** and in **Spain**.
   (`useResendCooldown` in `src/auth/verification.ts`). Existing players see it once at
   their next login.
 - **Email action links** (`src/app/auth/action.tsx`, `/auth/action?mode=…&oobCode=…`,
-  outside the sign-in gates): Firebase's emails link here once the console's
-  "Customize action URL" is set to `https://betterplayer23.github.io/betterplayer-app/auth/action`.
+  outside the sign-in gates): Firebase's emails link here once the action URL is set
+  (workflow `set-email-action-url`, or the console's "Customize action URL") to `https://betterplayer23.github.io/betterplayer-app/auth/action`.
   `verifyEmail` applies the code and goes straight to Home (or the next gate) with a
   short "Email confirmed" message (`setFlash` / `useFlash`); signed out → "Log in".
   `resetPassword` shows a new-password form (`confirmPasswordReset`). `recoverEmail`

@@ -1,0 +1,96 @@
+name: Set email action URL
+
+# One-off, run by hand (Actions → "Set email action URL" → Run workflow).
+# Sets the link in Firebase's emails (verify email, reset password, undo an
+# email change) to our in-app page, through the Identity Toolkit Admin API,
+# because the Firebase console fails to save it. Also makes sure the page's
+# domain is in Authentication → Settings → Authorized domains.
+# Then reads the settings back and prints ONLY these two values.
+# Uses the GCP_SA_KEY service account (github-deploy). Safe to run again.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Action URL for Firebase emails'
+        required: true
+        default: 'https://betterplayer23.github.io/betterplayer-app/auth/action'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: set-email-action-url
+  cancel-in-progress: false
+
+env:
+  PROJECT: betterplayer-beta
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set the action URL and read it back
+        env:
+          URL: ${{ inputs.url }}
+        run: |
+          set -euo pipefail
+          API="https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config"
+          TOKEN=$(gcloud auth print-access-token)
+          echo "::add-mask::$TOKEN"
+
+          # Calls the API; on an error prints Google's message (never the token)
+          # to the log (stderr, so it isn't swallowed by $(...)).
+          call() { # method, url, [body]
+            local out code args
+            out=$(mktemp)
+            args=(-sS -o "$out" -w '%{http_code}' -X "$1" "$2"
+              -H "Authorization: Bearer $TOKEN"
+              -H "x-goog-user-project: $PROJECT"
+              -H 'Content-Type: application/json')
+            if [ -n "${3:-}" ]; then args+=(--data "$3"); fi
+            code=$(curl "${args[@]}")
+            if [ "$code" -ge 300 ]; then
+              echo "::error::The API answered $code: $(jq -r '(.error.status // "") + " – " + (.error.message // "")' "$out" 2>/dev/null || echo 'no details')" >&2
+              if [ "$code" = 403 ]; then
+                echo "::error::The github-deploy service account isn't allowed to change Authentication settings. In Google Cloud → IAM & Admin → IAM, edit github-deploy@$PROJECT.iam.gserviceaccount.com and add the role 'Firebase Authentication Admin' (roles/firebaseauth.admin), then run this workflow again." >&2
+              fi
+              return 1
+            fi
+            cat "$out"
+          }
+
+          # 1. Current settings (only the two values we need).
+          current=$(call GET "$API")
+          echo "Before: action URL = $(jq -r '.notification.sendEmail.callbackUri // "(Firebase default)"' <<<"$current")"
+
+          # 2. The page's domain must be an authorized domain.
+          host=$(python3 -c "import sys,urllib.parse;print(urllib.parse.urlparse(sys.argv[1]).hostname)" "$URL")
+          if ! jq -e --arg h "$host" '(.authorizedDomains // []) | index($h)' <<<"$current" > /dev/null; then
+            body=$(jq -c --arg h "$host" '{authorizedDomains: ((.authorizedDomains // []) + [$h])}' <<<"$current")
+            call PATCH "$API?updateMask=authorizedDomains" "$body" > /dev/null
+            echo "Added $host to the authorized domains."
+          else
+            echo "$host is already an authorized domain."
+          fi
+
+          # 3. Set the action URL.
+          body=$(jq -nc --arg u "$URL" '{notification: {sendEmail: {callbackUri: $u}}}')
+          call PATCH "$API?updateMask=notification.sendEmail.callbackUri" "$body" > /dev/null
+
+          # 4. Read back and confirm.
+          after=$(call GET "$API")
+          saved=$(jq -r '.notification.sendEmail.callbackUri // ""' <<<"$after")
+          echo "After:  action URL = ${saved:-(Firebase default)}"
+          if [ "$saved" != "$URL" ]; then
+            echo "::error::The action URL wasn't saved."
+            exit 1
+          fi
+          jq -e --arg h "$host" '(.authorizedDomains // []) | index($h)' <<<"$after" > /dev/null \
+            || { echo "::error::$host is missing from the authorized domains."; exit 1; }
+          echo "::notice::Saved. Firebase emails now link to $URL"
