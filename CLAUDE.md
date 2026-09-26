@@ -409,10 +409,14 @@ Players must be **18+** and in **Spain**.
 - **Crowns** (all-time, one holder each): most eliminations / damage in one match (each
   squad game), biggest EA FC win margin, longest Clash Royale win streak. A strictly
   higher value takes it; the old holder is notified.
-- **Founder**: the first 100 verified players, numbered. The app calls `claimFounder` once
-  per session when signed in. Until the Maintenance job `assign-founders` has run (apply),
-  claims are only recorded; the job numbers existing verified players by when the app first
-  saw them verified, else by sign-up date (Firebase doesn't store the verification date).
+- **Founder**: the first 100 verified players, numbered. **#1 is reserved for the owner,
+  Fire__4REAL (`frantzbenois@gmail.com`, `OWNER_EMAIL`)**; real players follow from #2. The
+  app calls `claimFounder` once per session when signed in. Until the Maintenance job
+  `assign-founders` has run (apply), claims are only recorded; the job numbers existing
+  verified players by when the app first saw them verified, else by sign-up date (Firebase
+  doesn't store the verification date). Its preview prints the planned order (gamer tags).
+  `assignFounders` and `claimFounder` skip excluded accounts, frantzbenois+ addresses and
+  the tag GOD by themselves (even before `exclude-test-accounts` has run).
 - **Excluded accounts** (admin / test accounts): `users/{uid}.excludeFromRankings`, set only
   by Cloud Functions (`functions/src/exclusions.ts`): admins' callable
   `setRankingExclusion({ gamerTag | uid, exclude })` (Admin tab "Left out of rankings",

@@ -56,6 +56,8 @@ async function main() {
     console.log(
       `Verified players: ${r.verified} (${r.excluded} admin/test accounts left out). Founder numbers given: ${r.assigned}. Already founders: ${r.already} (${mode})`,
     );
+    // Planned order (preview only; gamer tags, never emails).
+    for (const p of r.planned) console.log(`  #${p.number} ${p.gamerTag}${p.already ? ' (already)' : ''}`);
   } else {
     console.log('Choose migrate-platforms, rebuild-stats, backfill-image-hashes, migrate-private, exclude-test-accounts or assign-founders.');
     process.exit(1);

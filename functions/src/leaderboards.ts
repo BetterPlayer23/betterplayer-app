@@ -11,6 +11,7 @@ import {
 import * as B from './shared/badges';
 import { getGame, winnersOf, type ResultDetails } from './shared/games';
 import { requireAdmin } from './matches/admin';
+import { OWNER_EMAIL, isExcludedTag, isTestEmail } from './exclusions';
 import { fail, madridDay, type MatchDoc, type ReportDoc } from './matches/common';
 
 // Leaderboards, live rank tiers, crowns, founders, season trophies,
@@ -368,6 +369,8 @@ export async function applyReview(db: Firestore, reviewId: string, now = new Dat
  * the next verified players get the next numbers, up to 100.
  */
 export async function claimFounder(db: Firestore, uid: string, now = new Date()) {
+  // Test accounts (frantzbenois+ addresses) never get a number.
+  if (isTestEmail((await getAuth().getUser(uid)).email)) return { status: 'excluded' };
   return db.runTransaction(async (tx) => {
     const badgesRef = db.collection('badges').doc(uid);
     const metaRef = db.collection('meta').doc('founders');
@@ -378,7 +381,7 @@ export async function claimFounder(db: Firestore, uid: string, now = new Date())
       tx.get(claimRef),
       tx.get(db.collection('users').doc(uid)),
     ]);
-    if (user.get('excludeFromRankings') === true) return { status: 'excluded' };
+    if (user.get('excludeFromRankings') === true || isExcludedTag(user.get('gamerTag'))) return { status: 'excluded' };
     const b = (badges.data() as B.PlayerBadges | undefined) ?? {};
     if (b.founder) return { status: 'founder', number: b.founder.number };
     if (!claim.exists) tx.set(claimRef, { uid, verifiedAt: Timestamp.fromDate(now) });
@@ -401,44 +404,63 @@ function writeFounder(tx: Transaction, db: Firestore, uid: string, b: B.PlayerBa
 
 /**
  * One-off (Maintenance → assign-founders): numbers the players whose email is
- * already verified, oldest first, then lets new verified players claim the
- * remaining numbers. Order: when the app first saw the verified email
- * (founderClaims), or else the account's sign-up date (Firebase doesn't record
- * when an email was verified). Safe to run again: existing founders keep
- * their numbers. Returns counts only.
+ * already verified, then lets new verified players claim the remaining
+ * numbers. Founder #1 is reserved for the owner's account (Fire__4REAL,
+ * frantzbenois@gmail.com). Then real players from #2, oldest first: when the
+ * app first saw the verified email (founderClaims), or else the account's
+ * sign-up date (Firebase doesn't record when an email was verified). Admin and
+ * test accounts never get a number (the excludeFromRankings flag, a
+ * frantzbenois+ address or the gamer tag GOD, even before the
+ * exclude-test-accounts job has run). Safe to run again: existing founders
+ * keep their numbers. The preview returns the planned order (gamer tags only).
  */
 export async function assignFounders(db: Firestore, apply: boolean, now = new Date()) {
-  const users: { uid: string; created: number }[] = [];
+  const users: { uid: string; created: number; owner: boolean }[] = [];
+  let skipped = 0;
   let pageToken: string | undefined;
   do {
     const page = await getAuth().listUsers(1000, pageToken);
     for (const u of page.users) {
-      if (u.emailVerified) users.push({ uid: u.uid, created: Date.parse(u.metadata.creationTime) || 0 });
+      const owner = (u.email ?? '').toLowerCase() === OWNER_EMAIL;
+      if (isTestEmail(u.email)) skipped++;
+      else if (u.emailVerified || owner) users.push({ uid: u.uid, created: Date.parse(u.metadata.creationTime) || 0, owner });
     }
     pageToken = page.pageToken;
   } while (pageToken);
   const claims = new Map(
     (await db.collection('founderClaims').get()).docs.map((d) => [d.id, (d.get('verifiedAt') as Timestamp).toMillis()]),
   );
-  // Admin / test accounts never get a number.
-  const excluded = new Set(
-    (await db.collection('users').where('excludeFromRankings', '==', true).get()).docs.map((d) => d.id),
-  );
-  const order = users
-    .filter((u) => !excluded.has(u.uid))
-    .map((u) => ({ uid: u.uid, at: claims.get(u.uid) ?? u.created }))
-    .sort((a, b) => a.at - b.at || (a.uid < b.uid ? -1 : 1));
+  const profiles = users.length ? await db.getAll(...users.map((u) => db.collection('users').doc(u.uid))) : [];
+  const profileOf = new Map(profiles.map((p) => [p.id, p]));
+  const isExcluded = (uid: string, owner: boolean) => {
+    if (owner) return false; // the owner always stays in
+    const p = profileOf.get(uid);
+    return p?.get('excludeFromRankings') === true || isExcludedTag(p?.get('gamerTag'));
+  };
+  const eligible = users.filter((u) => !isExcluded(u.uid, u.owner));
+  skipped += users.length - eligible.length;
+  const order = eligible
+    .map((u) => ({ uid: u.uid, owner: u.owner, at: claims.get(u.uid) ?? u.created }))
+    .sort((a, b) => Number(b.owner) - Number(a.owner) || a.at - b.at || (a.uid < b.uid ? -1 : 1));
+  const tagOf = (uid: string) => String(profileOf.get(uid)?.get('gamerTag') ?? '(no profile yet)');
 
   if (!apply) {
-    // Preview: how many would get a number now.
-    const founders = await db.collection('badges').where('founder.number', '>', 0).count().get();
-    const have = founders.data().count;
-    const without = order.length - Math.min(order.length, have);
+    // Preview: the numbers as they would be given now (existing ones kept).
+    const badgeSnaps = order.length ? await db.getAll(...order.map((u) => db.collection('badges').doc(u.uid))) : [];
+    let count = Number((await db.collection('meta').doc('founders').get()).get('count') ?? 0);
+    const planned: { number: number; gamerTag: string; already: boolean }[] = [];
+    order.forEach((u, i) => {
+      const have = (badgeSnaps[i].get('founder.number') as number | undefined) ?? 0;
+      if (have) planned.push({ number: have, gamerTag: tagOf(u.uid), already: true });
+      else if (count < B.FOUNDER_LIMIT) planned.push({ number: ++count, gamerTag: tagOf(u.uid), already: false });
+    });
+    planned.sort((a, b) => a.number - b.number);
     return {
       verified: users.length,
-      excluded: users.length - order.length,
-      assigned: Math.min(without, Math.max(0, B.FOUNDER_LIMIT - have)),
-      already: have,
+      excluded: skipped,
+      assigned: planned.filter((p) => !p.already).length,
+      already: planned.filter((p) => p.already).length,
+      planned,
     };
   }
   let assigned = 0;
@@ -460,7 +482,7 @@ export async function assignFounders(db: Firestore, apply: boolean, now = new Da
     if (result === 'full') break;
   }
   await db.collection('meta').doc('founders').set({ backfillDone: true }, { merge: true });
-  return { verified: users.length, excluded: users.length - order.length, assigned, already };
+  return { verified: users.length, excluded: skipped, assigned, already, planned: [] };
 }
 
 // ---------- season end

@@ -125,8 +125,11 @@ export async function setRankingExclusionAction(db: Firestore, adminUid: string,
 // Test accounts: every frantzbenois+…@gmail.com address. The owner's own
 // address (no "+") always stays included.
 const TEST_EMAIL = /^frantzbenois\+[^@]*@gmail\.com$/i;
-const OWNER_EMAIL = 'frantzbenois@gmail.com';
+export const OWNER_EMAIL = 'frantzbenois@gmail.com'; // Fire__4REAL: Founder #1, always ranked
 const EXCLUDED_TAGS = ['god']; // admin account(s), compared without case
+
+export const isTestEmail = (email: string | undefined) => TEST_EMAIL.test((email ?? '').toLowerCase());
+export const isExcludedTag = (tag: unknown) => typeof tag === 'string' && EXCLUDED_TAGS.includes(tag.toLowerCase());
 
 /**
  * One-off (Maintenance → exclude-test-accounts): finds the admin / test
