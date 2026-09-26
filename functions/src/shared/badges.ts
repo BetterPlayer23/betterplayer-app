@@ -192,7 +192,15 @@ export function addContribution(stats: SeasonStats, c: Contribution, sign: 1 | -
 
 // One row of a stored leaderboard. `at` = when the player reached this value
 // (earlier ranks higher on a tie).
-export type BoardEntry = { uid: string; tag: string; value: number; matches: number; at: number };
+export type BoardEntry = {
+  uid: string;
+  tag: string;
+  value: number;
+  matches: number;
+  at: number;
+  tier?: Tier | null; // the tier shown on the row (set by the server)
+  verifying?: boolean; // a result of theirs is being verified
+};
 
 export function sortEntries(entries: BoardEntry[]): BoardEntry[] {
   return [...entries].sort((a, b) => b.value - a.value || a.at - b.at || (a.uid < b.uid ? -1 : 1));
@@ -210,7 +218,8 @@ export function updateBoard(entries: BoardEntry[], changes: BoardChange[]): Boar
     const before = previous.get(c.uid);
     // Keep the original time when the value didn't change.
     const at = before && before.value === c.value ? before.at : c.at;
-    kept.push({ uid: c.uid, tag: c.tag, value: c.value, matches: c.matches, at });
+    // Extra fields stored on a row (tier, "being verified") are kept.
+    kept.push({ ...before, uid: c.uid, tag: c.tag, value: c.value, matches: c.matches, at });
   }
   return sortEntries(kept).slice(0, BOARD_LIST_SIZE);
 }

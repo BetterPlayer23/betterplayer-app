@@ -3,9 +3,9 @@
 // To change the rules: edit the text AND bump BETA_RULES_VERSION, so every
 // player is asked to accept the new version once.
 
-export const BETA_RULES_VERSION = 'v7';
+export const BETA_RULES_VERSION = 'v8';
 
-export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v7)';
+export const BETA_RULES_TITLE = 'BETTERPLAYER CLOSED BETA — RULES & PRIVACY (v8)';
 
 export const BETA_RULES_CONTACT_EMAIL = 'Better.player.one@gmail.com';
 
@@ -28,7 +28,7 @@ export const BETA_RULES: readonly { title: string; text: string }[] = [
   },
   {
     title: 'Review',
-    text: "Results are checked automatically. If the check is unclear or a player disputes, a Betterplayer admin reviews the match, and the admin's decision is final during the beta.",
+    text: 'Results are checked automatically and randomly reviewed by admins. If the check is unclear or a player disputes, a Betterplayer admin reviews the match. Leaderboard results can be held or removed if they look wrong. Fake results lead to removal of badges and trophies and to account deactivation. Any decision can be disputed (email Better.player.one@gmail.com) and is reviewed by a person.',
   },
   {
     title: 'Beta',

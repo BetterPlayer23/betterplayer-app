@@ -22,7 +22,11 @@ import { EmptyState } from '@/components/EmptyState';
 import { SectionTitle } from '@/components/Screen';
 import { games } from '@/constants/games';
 import { MIN_TOUCH, badgeColors, colors, fonts, withAlpha } from '@/constants/theme';
-import { useLeaderboard, useMyPosition, type MyPosition } from '@/badges/hooks';
+import { reportPlayer, useLeaderboard, useMyPosition, usePublicStats, type MyPosition } from '@/badges/hooks';
+import { Button } from '@/components/Button';
+import { FormMessage } from '@/components/FormMessage';
+import { TextField } from '@/components/TextField';
+import { matchError } from '@/matches/api';
 
 // Leaderboards of the current season (a calendar month): one per game and
 // stat. Opened from the card on Home: /leaderboard?game=…&stat=…
@@ -43,6 +47,8 @@ export default function LeaderboardScreen() {
   const board = useLeaderboard(season, gameId, stat);
   const top = board.data.slice(0, BOARD_SHOW);
   const me = useMyPosition(season, gameId, stat, user?.uid, board.data, board.loading);
+  const counts = usePublicStats(season);
+  const [reportFor, setReportFor] = useState<string | null>(null);
 
   return (
     <View style={styles.page}>
@@ -50,7 +56,7 @@ export default function LeaderboardScreen() {
         <SectionTitle>Leaderboards</SectionTitle>
         <Text style={styles.help}>
           {seasonLabel(season)} ends {seasonEnd(season)}. Only matches checked by Betterplayer count.
-          #1–10 Prism · #11–50 Neon · #51–250 Gold · 5+ matches Cobalt · everyone else Carbon.
+          The top 10 can earn Prism, the top 50 Neon, the top 250 Gold · 5+ matches Cobalt · everyone else Carbon.
         </Text>
         <ChipSelect
           label="Game"
@@ -80,19 +86,50 @@ export default function LeaderboardScreen() {
         ) : (
           <Card style={[styles.list, { borderColor: withAlpha(game.color, 0.35) }]}>
             {top.map((e, i) => (
-              <Row key={e.uid} entry={e} rank={i + 1} stat={stat} mine={e.uid === user?.uid} />
+              <Row
+                key={e.uid}
+                entry={e}
+                rank={i + 1}
+                stat={stat}
+                mine={e.uid === user?.uid}
+                reporting={reportFor === e.uid}
+                onReport={() => setReportFor(reportFor === e.uid ? null : e.uid)}
+                game={gameId}
+              />
             ))}
           </Card>
         )}
+        <Text style={styles.season}>
+          This season: {counts.rejected} result{counts.rejected === 1 ? '' : 's'} rejected · {counts.deactivated} account
+          {counts.deactivated === 1 ? '' : 's'} deactivated
+        </Text>
       </ScrollView>
       <YourPosition pos={me} stat={stat} />
     </View>
   );
 }
 
-function Row({ entry, rank, stat, mine }: { entry: BoardEntry; rank: number; stat: StatId; mine: boolean }) {
-  const tier = tierForRank(rank, entry.matches);
+function Row({
+  entry,
+  rank,
+  stat,
+  mine,
+  reporting,
+  onReport,
+  game,
+}: {
+  entry: BoardEntry;
+  rank: number;
+  stat: StatId;
+  mine: boolean;
+  reporting: boolean;
+  onReport: () => void;
+  game: string;
+}) {
+  // The tier the server set for this row (older rows: from the rank).
+  const tier = entry.tier !== undefined ? entry.tier : tierForRank(rank, entry.matches);
   return (
+    <View>
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Number ${rank}, ${entry.tag}, ${formatValue(stat, entry.value)}`}
@@ -100,11 +137,74 @@ function Row({ entry, rank, stat, mine }: { entry: BoardEntry; rank: number; sta
       style={({ pressed }) => [styles.row, mine && styles.rowMine, pressed && { opacity: 0.8 }]}>
       <Text style={[styles.rank, tier && { color: badgeColors[tier].color }]}>{rank}</Text>
       {tier ? <Badge kind={tier} size="medium" animate={false} /> : <View style={styles.badgeSpace} />}
-      <Text style={[styles.name, mine && { color: colors.primary }]} numberOfLines={1}>
-        {entry.tag}
-      </Text>
+      <View style={styles.nameBox}>
+        <Text style={[styles.name, mine && { color: colors.primary }]} numberOfLines={1}>
+          {entry.tag}
+        </Text>
+        {entry.verifying && <Text style={styles.verifying}>Being verified</Text>}
+      </View>
       <Text style={styles.value}>{formatValue(stat, entry.value)}</Text>
+      {!mine && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Report ${entry.tag}`}
+          onPress={onReport}
+          hitSlop={8}
+          style={styles.reportBtn}>
+          <Text style={styles.reportText}>Report</Text>
+        </Pressable>
+      )}
     </Pressable>
+    {reporting && <ReportForm target={entry} game={game} stat={stat} onDone={onReport} />}
+    </View>
+  );
+}
+
+// "Report" on a row: a reason is required; an admin looks at it.
+function ReportForm({ target, game, stat, onDone }: { target: BoardEntry; game: string; stat: StatId; onDone: () => void }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  return (
+    <View style={styles.reportBox}>
+      <TextField
+        label={`What looks wrong with ${target.tag}’s results?`}
+        value={reason}
+        onChangeText={setReason}
+        maxLength={300}
+        multiline
+        autoCapitalize="sentences"
+        autoCorrect
+      />
+      {msg && <FormMessage kind={msg.kind} text={msg.text} />}
+      {msg?.kind === 'success' ? (
+        <Button label="Close" variant="outline" size="small" onPress={onDone} />
+      ) : (
+        <View style={styles.reportRow}>
+          <Button label="Cancel" variant="outline" size="small" style={styles.flex} onPress={onDone} />
+          <Button
+            label="Send report"
+            variant="secondary"
+            size="small"
+            style={styles.flex}
+            loading={busy}
+            disabled={reason.trim().length < 5}
+            onPress={async () => {
+              setBusy(true);
+              setMsg(null);
+              try {
+                await reportPlayer({ targetUid: target.uid, game, stat, reason: reason.trim() });
+                setMsg({ kind: 'success', text: 'Thanks. A Betterplayer admin will look at it.' });
+              } catch (e) {
+                setMsg({ kind: 'error', text: matchError(e) });
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -112,7 +212,12 @@ function Row({ entry, rank, stat, mine }: { entry: BoardEntry; rank: number; sta
 function YourPosition({ pos, stat }: { pos: MyPosition | null; stat: StatId }) {
   let body;
   if (!pos) body = <Text style={styles.footText}>Working out your position…</Text>;
-  else if (pos.kind === 'none') body = <Text style={styles.footText}>You haven’t played this game this season yet.</Text>;
+  else if (pos.kind === 'none')
+    body = (
+      <Text style={styles.footText}>
+        {pos.verifying ? 'Your result is being verified.' : 'You haven’t played this game this season yet.'}
+      </Text>
+    );
   else if (pos.kind === 'needsMatches')
     body = (
       <Text style={styles.footText}>
@@ -120,13 +225,14 @@ function YourPosition({ pos, stat }: { pos: MyPosition | null; stat: StatId }) {
       </Text>
     );
   else {
-    const tier = tierForRank(pos.rank, pos.matches);
+    const tier = pos.tier;
     body = (
       <View style={styles.footRow}>
         <Text style={styles.footRank}>#{pos.rank}</Text>
         {tier && <Badge kind={tier} size="medium" />}
         <Text style={styles.footText} numberOfLines={2}>
           Your position{tier ? ` · ${tier[0].toUpperCase()}${tier.slice(1)}` : ''}
+          {pos.verifying ? ' · Being verified' : ''}
         </Text>
         <Text style={styles.value}>{formatValue(stat, pos.value)}</Text>
       </View>
@@ -197,8 +303,46 @@ const styles = StyleSheet.create({
   badgeSpace: {
     width: 44,
   },
-  name: {
+  nameBox: {
     flex: 1,
+  },
+  verifying: {
+    fontFamily: fonts.body,
+    fontSize: 11,
+    color: colors.awaiting,
+  },
+  reportBtn: {
+    minHeight: MIN_TOUCH,
+    justifyContent: 'center',
+    paddingLeft: 6,
+  },
+  reportText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
+  },
+  reportBox: {
+    gap: 10,
+    padding: 10,
+    marginBottom: 6,
+    borderRadius: 10,
+    backgroundColor: withAlpha(colors.secondary, 0.06),
+  },
+  reportRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  flex: {
+    flex: 1,
+  },
+  season: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  name: {
     fontFamily: fonts.bodySemiBold,
     fontSize: 15,
     color: colors.text,

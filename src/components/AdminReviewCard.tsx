@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { ADMIN_NOTE_MAX, ADMIN_NOTE_MIN } from '@shared/games';
 
+import { useMatchReview } from '@/admin/hooks';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -23,6 +24,7 @@ import { formatCredits } from '@/wallet/format';
 export function AdminReviewCard({ match }: { match: Match }) {
   const reports = useReports(match.id);
   const disputes = useDisputes(match.id, !!match.disputed);
+  const review = useMatchReview(match.id);
   const report = reports.data[0];
   const game = gameById(match.game);
   const { user } = useAuth();
@@ -71,7 +73,10 @@ export function AdminReviewCard({ match }: { match: Match }) {
         · Winner gets {formatCredits(match.winnerGets)}
       </Text>
 
-      <VerificationBadge verification={match.verification} reasons={match.reviewReasons} />
+      <VerificationBadge
+        review={review}
+        legacy={match.verification ? { verification: match.verification, reasonLabels: match.reviewReasons } : undefined}
+      />
 
       {report ? (
         <ReportView report={report} disputes={disputes.data} players={match.players} />

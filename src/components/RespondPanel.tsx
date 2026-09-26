@@ -9,7 +9,9 @@ import { FormMessage } from '@/components/FormMessage';
 import { CameraField } from '@/components/CameraField';
 import { TextField } from '@/components/TextField';
 import { colors, fonts, textGlow } from '@/constants/theme';
+import { gameById } from '@/constants/games';
 import { confirmResult, disputeResult, matchError } from '@/matches/api';
+import { useReports } from '@/matches/hooks';
 import type { Match } from '@/matches/types';
 import { uploadResultImage, type PickedImage } from '@/matches/upload';
 
@@ -39,6 +41,12 @@ export function RespondPanel({ match, uid }: { match: Match; uid: string }) {
   const [evidence, setEvidence] = useState<PickedImage | null>(null);
   const [busy, setBusy] = useState<null | 'confirm' | 'dispute'>(null);
   const [error, setError] = useState<string | null>(null);
+  // Squads: every player confirms their own row of the reported scoreboard.
+  const squad = gameById(match.game)?.resultKind === 'eliminations';
+  const reports = useReports(match.id);
+  const details = (reports.data[0]?.details ?? {}) as { eliminations?: Record<string, number>; damage?: Record<string, number> };
+  const myElims = details.eliminations?.[uid];
+  const myDamage = details.damage?.[uid];
 
   async function confirm() {
     setBusy('confirm');
@@ -108,16 +116,26 @@ export function RespondPanel({ match, uid }: { match: Match; uid: string }) {
         </>
       ) : (
         <>
-          <Text style={styles.body}>
-            Check the result and screenshot. If nobody responds in time, it counts as confirmed.
-          </Text>
+          {squad && myElims !== undefined ? (
+            <>
+              <Text style={styles.body}>Check your own row of the scoreboard:</Text>
+              <Text style={styles.row}>
+                {myElims} eliminations · {myDamage ?? 0} damage
+              </Text>
+              <Text style={styles.body}>If nobody responds in time, it counts as confirmed.</Text>
+            </>
+          ) : (
+            <Text style={styles.body}>
+              Check the result and screenshot. If nobody responds in time, it counts as confirmed.
+            </Text>
+          )}
           <Button
-            label="Confirm result"
+            label={squad ? 'My row is right' : 'Confirm result'}
             variant="primary"
             onPress={confirm}
             loading={busy === 'confirm'}
           />
-          <Button label="Dispute" variant="danger" onPress={() => setMode('dispute')} />
+          <Button label={squad ? 'My row is wrong' : 'Dispute'} variant="danger" onPress={() => setMode('dispute')} />
         </>
       )}
       {error && <FormMessage kind="error" text={error} />}
@@ -126,6 +144,11 @@ export function RespondPanel({ match, uid }: { match: Match; uid: string }) {
 }
 
 const styles = StyleSheet.create({
+  row: {
+    fontFamily: fonts.heading,
+    fontSize: 22,
+    color: colors.primary,
+  },
   card: {
     gap: 12,
     borderColor: colors.awaiting,

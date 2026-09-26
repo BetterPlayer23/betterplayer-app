@@ -213,49 +213,10 @@ export type Verification = {
   reason: string;
   similarTo?: string | null; // an earlier image this one looks very like
 };
-export const DEFAULT_VISION_MODEL = 'claude-sonnet-5';
-export const DEFAULT_AUTO_THRESHOLD = 0.9;
 export const REVERSAL_HOURS = 24; // admins can reverse an automatic decision this long
 
-// Why a match went to an admin instead of being approved automatically.
-export type ReviewReason =
-  | 'dispute'
-  | 'mismatch'
-  | 'low_confidence'
-  | 'unreadable'
-  | 'duplicate'
-  | 'not_checked'
-  | 'auto_off';
-export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
-  dispute: 'Disputed by a player',
-  mismatch: 'Screenshot doesn’t match the report',
-  low_confidence: 'Low confidence',
-  unreadable: 'Screenshot unreadable',
-  duplicate: 'Looks like an earlier screenshot',
-  not_checked: 'Not checked automatically',
-  auto_off: 'Auto-approval is off',
-};
-
-/**
- * The reasons a match can't be approved automatically (empty = approve it).
- * Auto-approval needs: auto-approval on, no dispute, a "match" verification
- * with confidence >= threshold, and no near-duplicate image.
- */
-export function autoReviewReasons(
-  config: { autoApprove: boolean; threshold: number },
-  disputed: boolean,
-  verification: Verification | null | undefined,
-): ReviewReason[] {
-  const reasons: ReviewReason[] = [];
-  if (disputed) reasons.push('dispute');
-  if (!verification) reasons.push('not_checked');
-  else if (verification.status === 'mismatch') reasons.push('mismatch');
-  else if (verification.status === 'unreadable') reasons.push('unreadable');
-  else if (!(verification.confidence >= config.threshold)) reasons.push('low_confidence');
-  if (verification?.similarTo) reasons.push('duplicate');
-  if (!config.autoApprove) reasons.push('auto_off');
-  return reasons;
-}
+// How a match is checked and when it goes to an admin is decided on the server
+// only (functions/src/antiCheat.ts): the app never contains those rules.
 
 export const REPUTATION_COMPLETED = 1; // each player of a completed match
 export const REPUTATION_PENALTY = -5; // report overridden, or dispute rejected

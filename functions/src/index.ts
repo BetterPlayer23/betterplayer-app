@@ -16,6 +16,8 @@ import { requireUid, requireVerifiedEmail } from './matches/common';
 import * as authEmails from './authEmails';
 import { setRankingExclusionAction } from './exclusions';
 import * as boards from './leaderboards';
+import { applyPromotions } from './boardEngine';
+import * as integrity from './integrity';
 import { previousSeason, seasonOf } from './shared/badges';
 import { acceptRules as acceptRulesAction } from './rules';
 import { guardBackground, guardCallable, registerSecret } from './safeLog';
@@ -90,6 +92,19 @@ export const submitResult = onCall(
     );
   },
 );
+// Step 1 of the result form: read the photo and pre-fill the form.
+export const readResultPhoto = onCall(
+  { ...photoOptions, secrets: [anthropicApiKey], timeoutSeconds: 120 },
+  async (request: CallableRequest<Record<string, unknown> | undefined>) => {
+    const uid = requireUid(request.auth);
+    const apiKey = anthropicApiKey.value();
+    registerSecret(apiKey);
+    return guardCallable('readResultPhoto', () =>
+      results.readResultPhoto(getFirestore(), uid, request.data, new Date(), apiKey),
+    );
+  },
+);
+
 export const confirmResult = callable(results.confirmResult);
 // Dispute photos are checked for duplicates too.
 export const disputeResult = callable(results.disputeResult, photoOptions);
@@ -203,5 +218,22 @@ export const closeSeasons = onSchedule(
       const season = previousSeason(seasonOf(new Date()));
       const trophies = await boards.closeSeason(getFirestore(), season);
       logger.info('Season closed', { season, trophies });
+    }),
+);
+
+// Fair play: player reports (from a leaderboard row), admin actions with an
+// audit log, and the admin view of the secret settings.
+export const reportPlayer = callable(integrity.reportPlayer, {}, true);
+export const integrityAction = callable(integrity.integrityAction);
+export const getAntiCheatSettings = callable(integrity.getAntiCheatSettings);
+export const setAntiCheatSettings = callable(integrity.setAntiCheatSettings);
+
+// Promotions to Neon / Prism are applied later, at a random time.
+export const applyPendingPromotions = onSchedule(
+  { schedule: 'every 15 minutes', timeZone: 'Europe/Madrid' },
+  () =>
+    guardBackground('applyPendingPromotions', async () => {
+      const n = await applyPromotions(getFirestore());
+      if (n) logger.info('Promotions applied', { count: n });
     }),
 );

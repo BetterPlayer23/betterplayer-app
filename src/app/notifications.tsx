@@ -44,7 +44,16 @@ export default function NotificationsScreen() {
 }
 
 function Item({ n }: { n: Notification }) {
-  const kind = n.type === 'founder' ? 'founder' : n.type.startsWith('crown') ? 'crown' : n.type === 'trophy' ? 'prism' : 'gold';
+  const kind =
+    n.type === 'founder'
+      ? 'founder'
+      : n.type.startsWith('crown')
+        ? 'crown'
+        : n.type === 'trophy'
+          ? 'prism'
+          : ['warning', 'rejected', 'disqualified'].includes(n.type)
+            ? 'carbon'
+            : 'gold';
   const when = n.createdAt?.toDate().toLocaleString('en-GB', {
     day: 'numeric',
     month: 'short',

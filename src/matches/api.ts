@@ -50,9 +50,26 @@ export type ResultInput = {
   details: Record<string, unknown>;
   screenshotPath: string;
   notes?: string;
+  confirmReal: true; // "I confirm these numbers are real"
+  manual?: boolean; // the photo couldn't be read: typed by hand
 };
 
 export const submitResult = (input: ResultInput) => call('submitResult', input);
+
+// Step 1 of the result form: what the photo shows, to pre-fill steps 2 and 3.
+export type PhotoReading = {
+  readable: boolean;
+  winnerUids: string[] | null; // null = the photo doesn't show it
+  details: {
+    goals?: Record<string, number>;
+    crowns?: Record<string, number>;
+    eliminations?: Record<string, number>;
+    damage?: Record<string, number>;
+  };
+};
+
+export const readResultPhoto = (matchId: string, screenshotPath: string) =>
+  call<PhotoReading>('readResultPhoto', { matchId, screenshotPath });
 
 export const confirmResult = (matchId: string) => call('confirmResult', { matchId });
 

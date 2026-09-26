@@ -4,6 +4,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { AdminReviewCard } from '@/components/AdminReviewCard';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { FairPlayAdmin } from '@/components/FairPlayAdmin';
 import { FlagsList } from '@/components/FlagsList';
 import { FormMessage } from '@/components/FormMessage';
 import { PastDecisionRow } from '@/components/PastDecisionRow';
@@ -40,6 +41,8 @@ export default function AdminScreen() {
       ) : (
         queue.data.map((m) => <AdminReviewCard key={m.id} match={m} />)
       )}
+
+      <FairPlayAdmin />
 
       <SectionTitle>Suspicious patterns</SectionTitle>
       <Text style={styles.help}>

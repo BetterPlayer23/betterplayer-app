@@ -157,6 +157,7 @@ function Room({ match }: { match: Match }) {
                 : `${tag(winners[0])} got ${formatCredits(match.winnerGets)} credits.`}
             {winners.includes(uid) ? ' Well played!' : ''}
           </Text>
+          {match.spotChecked && <Text style={styles.spot}>✓ Spot-checked by an admin</Text>}
         </Card>
       )}
 
@@ -461,6 +462,11 @@ function LobbyCode({
 }
 
 const styles = StyleSheet.create({
+  spot: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.success,
+  },
   center: {
     flex: 1,
     alignItems: 'center',

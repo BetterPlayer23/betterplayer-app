@@ -1,7 +1,7 @@
 import type { Timestamp } from 'firebase/firestore';
 
 import type { Chip } from '@shared/badges';
-import type { MatchStatus, ReviewReason, Verification } from '@shared/games';
+import type { MatchStatus, Verification } from '@shared/games';
 
 // matches/{id}, written only by Cloud Functions (functions/src/matches).
 export type MatchPlayer = {
@@ -55,7 +55,8 @@ export type Match = {
   settledAt?: Timestamp;
   // Automatic result check (Claude vision)
   verification?: Verification & { model?: string; checkedAt?: Timestamp };
-  reviewReasons?: ReviewReason[];
+  reviewReasons?: string[]; // older matches only (now admin-only in matchReview)
+  spotChecked?: boolean; // an admin spot-checked it
   decidedBy?: 'admin' | 'vision';
   reversedAt?: Timestamp;
 };

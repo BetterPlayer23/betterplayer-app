@@ -18,7 +18,9 @@ import {
   boardDocId,
   seasonStatsId,
   statValue,
+  tierForRank,
   type BoardEntry,
+  type Tier,
   type PlayerBadges,
   type SeasonStats,
   type StatId,
@@ -62,9 +64,15 @@ export function useLeaderboard(season: string, game: string, stat: StatId): Live
 }
 
 export type MyPosition =
-  | { kind: 'none' } // no matches in this game this season
-  | { kind: 'needsMatches'; matches: number } // average needs 10 matches
-  | { kind: 'ranked'; rank: number; value: number; matches: number };
+  | { kind: 'none'; verifying: boolean } // no counted matches in this game this season
+  | { kind: 'needsMatches'; matches: number; verifying: boolean } // average needs 10 matches
+  | { kind: 'ranked'; rank: number; value: number; matches: number; tier: Tier | null; verifying: boolean };
+
+// Off the stored board: Cobalt / Carbon at most (the server decides the rest).
+const offBoardTier = (matches: number): Tier | null => {
+  const t = tierForRank(null, matches);
+  return t === 'prism' || t === 'neon' ? 'gold' : t;
+};
 
 /**
  * The player's own place. From the board when they are on it; otherwise from
@@ -87,16 +95,19 @@ export function useMyPosition(
     if (!uid || boardLoading || onBoard) return;
     (async () => {
       const snap = await getDoc(doc(db, 'seasonStats', seasonStatsId(season, game, uid)));
-      if (!snap.exists()) return { kind: 'none' } as const;
+      if (!snap.exists()) return { kind: 'none', verifying: false } as const;
       const s = snap.data() as SeasonStats;
+      const verifying = Number(snap.get('verifying') ?? 0) > 0;
       const value = statValue(s, stat);
       if (value === null) {
-        return s.matches > 0 ? ({ kind: 'needsMatches', matches: s.matches } as const) : ({ kind: 'none' } as const);
+        return s.matches > 0
+          ? ({ kind: 'needsMatches', matches: s.matches, verifying } as const)
+          : ({ kind: 'none', verifying } as const);
       }
       const ahead = await getCountFromServer(
         query(collection(db, 'seasonStats'), where('season', '==', season), where('game', '==', game), where(stat, '>', value)),
       );
-      return { kind: 'ranked', rank: ahead.data().count + 1, value, matches: s.matches } as const;
+      return { kind: 'ranked', rank: ahead.data().count + 1, value, matches: s.matches, tier: offBoardTier(s.matches), verifying } as const;
     })()
       .then((p) => alive && setPos(p))
       .catch(() => alive && setPos(null));
@@ -104,7 +115,16 @@ export function useMyPosition(
       alive = false;
     };
   }, [season, game, stat, uid, boardLoading, onBoard]);
-  if (onBoard) return { kind: 'ranked', rank: index + 1, value: onBoard.value, matches: onBoard.matches };
+  if (onBoard) {
+    return {
+      kind: 'ranked',
+      rank: index + 1,
+      value: onBoard.value,
+      matches: onBoard.matches,
+      tier: onBoard.tier !== undefined ? onBoard.tier : tierForRank(index + 1, onBoard.matches),
+      verifying: !!onBoard.verifying,
+    };
+  }
   return pos;
 }
 
@@ -177,4 +197,24 @@ export async function setRankingExclusion(input: ({ gamerTag: string } | { uid: 
     'setRankingExclusion',
   )(input);
   return data;
+}
+
+// publicStats/{season}: results rejected and accounts deactivated this season.
+export function usePublicStats(season: string) {
+  const [data, setData] = useState<{ rejected: number; deactivated: number }>({ rejected: 0, deactivated: 0 });
+  useEffect(
+    () =>
+      onSnapshot(
+        doc(db, 'publicStats', season),
+        (snap) => setData({ rejected: Number(snap.get('rejected') ?? 0), deactivated: Number(snap.get('deactivated') ?? 0) }),
+        () => undefined,
+      ),
+    [season],
+  );
+  return data;
+}
+
+// Report a player on a leaderboard (reason required; a few per day).
+export async function reportPlayer(input: { targetUid: string; game: string; stat: string; reason: string }) {
+  await httpsCallable(functions, 'reportPlayer')(input);
 }

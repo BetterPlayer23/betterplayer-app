@@ -4,13 +4,8 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { logger } from 'firebase-functions';
 
-import {
-  DEFAULT_AUTO_THRESHOLD,
-  DEFAULT_VISION_MODEL,
-  type GameConfig,
-  type ResultDetails,
-  type Verification,
-} from '../shared/games';
+import { ANTI_CHEAT_DEFAULTS, DEFAULT_VISION_MODEL } from '../antiCheat';
+import { checkResult, type GameConfig, type ResultDetails, type Verification } from '../shared/games';
 import { logError, registerSecret } from '../safeLog';
 import { fail, type MatchDoc, type MatchPlayer } from './common';
 
@@ -28,7 +23,7 @@ export function readReviewConfig(data: Record<string, unknown> | undefined): Rev
   const model = data?.visionModel;
   return {
     autoApprove: data?.autoApprove === true,
-    threshold: threshold > 0 && threshold <= 1 ? threshold : DEFAULT_AUTO_THRESHOLD,
+    threshold: threshold > 0 && threshold <= 1 ? threshold : ANTI_CHEAT_DEFAULTS.autoThreshold,
     visionModel: typeof model === 'string' && model.trim() ? model.trim() : DEFAULT_VISION_MODEL,
   };
 }
@@ -327,6 +322,96 @@ export function namesMatch(a: string, b: string): boolean {
   return editDistance(x, y) <= Math.max(1, Math.floor(Math.max(x.length, y.length) / 5));
 }
 
+// ---------- pre-filling the result form from the reading
+
+// What the photo check read, matched to the match's players, for the result
+// form (step 2 winner, step 3 numbers). Never includes the confidence.
+export type Prefill = {
+  readable: boolean; // every player found on a final result screen
+  winnerUids: string[] | null; // null = the photo doesn't show it
+  details: ResultDetails; // only the numbers that were read
+};
+
+function findPlayers(reading: VisionReading, match: Pick<MatchDoc, 'players'>, gameIds: GameIdMap) {
+  const used = new Set<number>();
+  const found = new Map<string, number>();
+  for (const p of match.players) {
+    const i = reading.playerNames.findIndex(
+      (name, idx) =>
+        !used.has(idx) && (namesMatch(name, gameIdOf(p, gameIds)) || namesMatch(name, p.gamerTag)),
+    );
+    if (i >= 0) {
+      used.add(i);
+      found.set(p.uid, i);
+    }
+  }
+  return found;
+}
+
+export function prefillFromReading(
+  reading: VisionReading | null,
+  game: GameConfig,
+  match: Pick<MatchDoc, 'players'>,
+  gameIds: GameIdMap = {},
+): Prefill {
+  const empty: Prefill = { readable: false, winnerUids: null, details: {} };
+  if (!reading || !reading.isFinalScreen || !reading.playerNames.length) return empty;
+  if (reading.scores.length !== reading.playerNames.length) return empty;
+  const squad = game.resultKind === 'eliminations';
+  const found = findPlayers(reading, match, gameIds);
+  const uids = match.players.map((p) => p.uid);
+  const pick = (values: number[]) =>
+    Object.fromEntries(
+      [...found].flatMap(([uid, i]) =>
+        Number.isInteger(values[i]) && values[i] >= 0 ? [[uid, values[i]]] : [],
+      ),
+    ) as Record<string, number>;
+  const details: ResultDetails = {};
+  details[SCORE_KEY[game.resultKind]] = pick(reading.scores);
+  if (squad && reading.damage.length === reading.playerNames.length) details.damage = pick(reading.damage);
+  const readable =
+    found.size === uids.length &&
+    Object.keys(details[SCORE_KEY[game.resultKind]]!).length === uids.length &&
+    (!squad || Object.keys(details.damage ?? {}).length === uids.length);
+  if (!readable) return { readable: false, winnerUids: null, details };
+
+  let winnerUids: string[] | null = null;
+  if (game.resultKind === 'goals') {
+    const g = details.goals!;
+    const [a, b] = uids;
+    if (g[a] !== g[b]) winnerUids = [g[a] > g[b] ? a : b];
+    else if (reading.winnerName) {
+      const w = match.players.find(
+        (p) => namesMatch(reading.winnerName, gameIdOf(p, gameIds)) || namesMatch(reading.winnerName, p.gamerTag),
+      );
+      winnerUids = w ? [w.uid] : null;
+    }
+  } else {
+    const checked = checkResult(game, uids, null, details);
+    winnerUids = 'error' in checked ? null : checked.winners;
+  }
+  return { readable: true, winnerUids, details };
+}
+
+/** Which submitted values differ from what the photo showed ("winner", "goals.<uid>", ...). */
+export function editedFields(prefill: Prefill, submitted: { winnerUids: string[]; details: ResultDetails }): string[] {
+  const out: string[] = [];
+  if (!prefill.readable) return out;
+  if (prefill.winnerUids) {
+    const a = [...prefill.winnerUids].sort().join();
+    const b = [...submitted.winnerUids].sort().join();
+    if (a !== b) out.push('winner');
+  }
+  for (const key of ['goals', 'crowns', 'eliminations', 'damage'] as const) {
+    const read = prefill.details[key];
+    if (!read) continue;
+    for (const [uid, v] of Object.entries(read)) {
+      if (submitted.details[key]?.[uid] !== v) out.push(`${key}.${uid}`);
+    }
+  }
+  return out;
+}
+
 // ---------- comparing the reading with the report
 
 const SCORE_KEY = { goals: 'goals', crowns: 'crowns', eliminations: 'eliminations' } as const;
@@ -417,59 +502,47 @@ export function compareReading(
 }
 
 /**
- * Runs the automatic check on a reported result. Never throws: if the check
- * can't run (no API key, API error), the result is "unreadable" with a reason,
- * and an admin reviews the match.
+ * Reads a result photo with the vision model (or the emulator mock). Never
+ * throws: when the check can't run (no API key, API error), `reading` is null
+ * and `unavailable` says why (for admins).
  */
-export async function verifyResult(
+export async function readPhoto(
   db: Firestore,
-  opts: {
-    apiKey: string;
-    game: GameConfig;
-    match: Pick<MatchDoc, 'players'>;
-    report: { winnerUids: string[]; details: ResultDetails };
-    image: LoadedImage;
-    gameIds?: GameIdMap;
-  },
-): Promise<{ verification: Verification & { model: string }; reading: VisionReading | null }> {
+  opts: { apiKey: string; game: GameConfig; players: number; image: LoadedImage },
+): Promise<{ reading: VisionReading | null; model: string; unavailable: string | null }> {
   const config = readReviewConfig((await reviewConfigRef(db).get()).data());
   const req: VisionRequest = {
     apiKey: opts.apiKey,
     model: config.visionModel,
-    prompt: buildPrompt(opts.game, opts.match.players.length),
+    prompt: buildPrompt(opts.game, opts.players),
     jpeg: opts.image.jpeg,
   };
   registerSecret(opts.apiKey);
-  let reading: VisionReading | null = null;
   try {
     if (process.env.FUNCTIONS_EMULATOR === 'true') {
-      reading = await callMock(db, req);
-    } else if (!opts.apiKey || opts.apiKey === 'not-set') {
-      logger.warn('Automatic result check is off: set the ANTHROPIC_API_KEY secret.');
-      return {
-        verification: {
-          status: 'unreadable',
-          confidence: 0,
-          reason: 'Automatic check isn’t set up.',
-          model: config.visionModel,
-        },
-        reading: null,
-      };
-    } else {
-      reading = await callClaude(req);
+      return { reading: await callMock(db, req), model: config.visionModel, unavailable: null };
     }
+    if (!opts.apiKey || opts.apiKey === 'not-set') {
+      logger.warn('Automatic result check is off: set the ANTHROPIC_API_KEY secret.');
+      return { reading: null, model: config.visionModel, unavailable: 'Automatic check isn’t set up.' };
+    }
+    return { reading: await callClaude(req), model: config.visionModel, unavailable: null };
   } catch (e) {
     logError('Automatic result check failed', e);
-    return {
-      verification: {
-        status: 'unreadable',
-        confidence: 0,
-        reason: 'Automatic check unavailable.',
-        model: config.visionModel,
-      },
-      reading: null,
-    };
+    return { reading: null, model: config.visionModel, unavailable: 'Automatic check unavailable.' };
   }
-  const verification = compareReading(reading, opts.game, opts.match, opts.report, opts.gameIds);
-  return { verification: { ...verification, model: config.visionModel }, reading };
+}
+
+/** Compares a reading with the report (verification for admins). */
+export function verificationOf(
+  read: { reading: VisionReading | null; model: string; unavailable: string | null },
+  game: GameConfig,
+  match: Pick<MatchDoc, 'players'>,
+  report: { winnerUids: string[]; details: ResultDetails },
+  gameIds?: GameIdMap,
+): Verification & { model: string } {
+  if (read.unavailable) {
+    return { status: 'unreadable', confidence: 0, reason: read.unavailable, model: read.model };
+  }
+  return { ...compareReading(read.reading, game, match, report, gameIds), model: read.model };
 }

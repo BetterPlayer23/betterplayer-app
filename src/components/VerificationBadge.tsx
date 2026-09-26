@@ -1,7 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { REVIEW_REASON_LABELS, type ReviewReason, type Verification } from '@shared/games';
-
+import type { MatchReview } from '@/admin/hooks';
 import { colors, fonts, glow, withAlpha } from '@/constants/theme';
 
 const look = {
@@ -10,22 +9,16 @@ const look = {
   unreadable: { label: 'UNREADABLE', color: colors.awaiting },
 } as const;
 
-// The automatic check's verdict on the result photo, with its confidence and
-// reason, and why the match came to an admin.
-export function VerificationBadge({
-  verification,
-  reasons,
-}: {
-  verification?: Verification | null;
-  reasons?: ReviewReason[];
-}) {
+// Admins: the automatic check's verdict on the result photo, what was changed
+// after the photo was read, and why the match came to an admin. Everything
+// comes from matchReview/{id} (admins only); older matches kept the verdict
+// on the match itself (`legacy`).
+export function VerificationBadge({ review, legacy }: { review: MatchReview | null; legacy?: MatchReview }) {
+  const r = review ?? legacy ?? null;
+  const verification = r?.verification;
   const base = verification ? look[verification.status] : null;
-  // A "match" below the confidence threshold shows amber (low confidence).
-  const v =
-    base && verification?.status === 'match' && reasons?.includes('low_confidence')
-      ? { ...base, color: colors.awaiting }
-      : base;
-  const why = (reasons ?? []).map((r) => REVIEW_REASON_LABELS[r] ?? r).join(' · ');
+  const v = base;
+  const why = (r?.reasonLabels ?? []).join(' · ');
   return (
     <View style={styles.box}>
       <View style={styles.row}>
@@ -49,10 +42,14 @@ export function VerificationBadge({
       </View>
       {verification?.reason ? <Text style={styles.text}>{verification.reason}</Text> : null}
       {verification?.similarTo ? (
-        <Text style={[styles.text, { color: colors.awaiting }]}>
-          The photo looks like an earlier result photo.
-        </Text>
+        <Text style={[styles.text, { color: colors.awaiting }]}>The photo looks like an earlier result photo.</Text>
       ) : null}
+      {r?.manual ? <Text style={[styles.text, { color: colors.awaiting }]}>Entered by hand: the photo couldn’t be read.</Text> : null}
+      {(r?.editLabels ?? []).map((e) => (
+        <Text key={e} style={[styles.text, { color: colors.awaiting }]}>
+          Changed after the photo check: {e}
+        </Text>
+      ))}
       {why ? <Text style={styles.why}>Needs review: {why}</Text> : null}
     </View>
   );

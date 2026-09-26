@@ -104,6 +104,9 @@ Players must be **18+** and in **Spain**.
 - `src/wallet/` – live, read-only wallet and ledger data, credit formatting and labels.
   Wallet history is read 20 lines at a time ("Show more", up to 100). A negative
   available balance (an admin reversal after a payout) shows an explanation.
+- `src/admin/hooks.ts` – admin-only reads (matchReview, spot checks, held results, reports,
+  audit log) and the fair-play callables; `src/components/FairPlayAdmin.tsx` (Admin tab
+  sections). `src/components/ReportResultForm.tsx` – the 3-step result form.
 - `src/badges/hooks.ts` – badges, leaderboards, "your position", notifications (read-only
   except marking your own notifications read), `dismissFlag`. `src/components/Badge.tsx`
   (`Badge`, `BadgeChip`), `BadgeShowcase`, `LeaderboardCard` (Home), `FlagsList` (Admin).
@@ -240,11 +243,13 @@ Players must be **18+** and in **Spain**.
   for existing players, once at next login; checkbox "I am 18+ and accept the beta
   rules"). Read-only `src/app/beta-rules.tsx`, linked from Profile and Sign up.
 - `createMatch` / `joinMatch` refuse players who haven't accepted the current version.
-- Current version: **v7**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
+- Current version: **v8**. Sections: 1 Who can join, 2 Credits, 3 Games and winners
   (the game rules above incl. REDSEC; 10% fee, winner 90%; badges, ranks, leaderboards
   and trophies are for fun, not transferable, no cash value), 4 Fair play, 5 Review (checked
-  automatically; unclear checks and disputes go to an admin, whose decision is
-  final), 6 Beta, 7 Your data (controller "Betterplayer (Better.player.one@gmail.com)";
+  automatically and randomly reviewed by admins; unclear checks and disputes go to an
+  admin; leaderboard results can be held or removed; fake results lead to removal of
+  badges and trophies and to deactivation; any decision can be disputed by email and
+  is reviewed by a person), 6 Beta, 7 Your data (controller "Betterplayer (Better.player.one@gmail.com)";
   stats visible to other players; screenshots checked by an AI system (Anthropic);
   any player can dispute; result screenshots deleted after 90 days, fingerprints kept).
 
@@ -305,6 +310,17 @@ Players must be **18+** and in **Spain**.
 
 ## Results and review (round B)
 
+- **Result form** (`src/components/ReportResultForm.tsx`), three steps with a slide
+  (none with "reduce motion"): 1 Photo (frame guide per game; after capture the photo is
+  uploaded and `readResultPhoto` reads it: "Reading your result…"); 2 Winner ("The
+  photo shows X won", pre-selected, Confirm or pick another); 3 Numbers (pre-filled,
+  "Read from photo", an edited box is highlighted with "Edited · photo shows N"), a
+  static warning line and the required tick "I confirm these numbers are real"
+  (`confirmReal`). Unreadable photo → "Retake photo" or "Enter manually" (`manual`,
+  always admin review). `readResultPhoto` stores the reading in `photoReads/{matchId}_{uid}`
+  (server-only; a few reads per player per match) and returns only the pre-fill (never
+  the confidence); `submitResult` reuses it for the same file and records what was
+  edited. Squads: each other player confirms their own row ("My row is right / wrong").
 - Flow: `started` → a player reports (`submitResult`) → `awaiting_result` with
   `responseDeadline` = +30 min → the other players `confirmResult` or
   `disputeResult` → `under_review` (`disputed` true/false) → an admin decides
@@ -456,9 +472,11 @@ Players must be **18+** and in **Spain**.
   (default false), `threshold` (default 0.9), `visionModel` (default `claude-sonnet-5`).
 - The server compares the reading with the players' saved game IDs (or gamer tags;
   tolerant: case/accents/symbols ignored, clan tags, ~1 in 5 letters misread) and
-  with the reported score and winner, and saves `matches/{id}.verification`
-  `{status: match|mismatch|unreadable, confidence, reason, similarTo?, model}`;
-  the raw reading goes on the report (`vision`).
+  with the reported score and winner, and saves the verdict
+  `{status: match|mismatch|unreadable, confidence, reason, similarTo?, model}`, the raw
+  reading, the pre-fill, the edits and the review reasons in **`matchReview/{matchId}`
+  (admins only)**: never on the match or report players can read (older matches still
+  have `verification` / `reviewReasons` / `vision` there).
 - Duplicates: 256-bit difference hash + SHA-256 of every accepted result image in
   `imageHashes/{matchId}_{uid}_{report|dispute}` (server-only). ≤ 26 bits apart →
   refused; ≤ 48 → accepted but flagged `similarTo` (never auto-approved).
@@ -469,11 +487,12 @@ Players must be **18+** and in **Spain**.
   `backfill-image-hashes` maintenance job.
 - Auto-approval happens at the moment a match would go to `under_review`
   (everyone confirmed, or the 30-minute window closed), in the same transaction:
-  `autoReviewReasons` in shared games must be empty (auto-approve on, no dispute,
-  status `match`, confidence ≥ threshold, no look-alike). Then it settles like an
-  admin Approve, with `decidedBy: "vision"`, `adminUid: null`. Otherwise the match
-  goes to `under_review` with `reviewReasons` (dispute, mismatch, low_confidence,
-  unreadable, duplicate, not_checked, auto_off).
+  `reviewReasons` in `functions/src/antiCheat.ts` must be empty (auto-approve on, no
+  dispute, status `match`, confidence ≥ threshold, no look-alike, nothing edited, not
+  manual, nobody on the watch list). Then it settles like an admin Approve, with
+  `decidedBy: "vision"`, `adminUid: null`. Otherwise the match goes to `under_review` and
+  the reasons (dispute, mismatch, low_confidence, unreadable, duplicate, not_checked,
+  auto_off, edited, manual, watch) go to `matchReview` with admin labels.
 - Admin tab: `VerificationBadge` on queued matches; Past decisions label automatic
   ones "Auto (Vision)". `reverseAutoDecision(matchId, override|cancel_refund,
   winnerUid?, note)`: admins only, not their own match, within 24 h of an automatic
@@ -483,6 +502,47 @@ Players must be **18+** and in **Spain**.
 - Emulator tests: in the emulator the API is never called; the answer comes from
   `_emulator/visionMock` (`{reading}` or `{error}`) and the request is saved in
   `_emulator/visionLastCall`.
+
+## Fair play (anti-cheat)
+
+- **The rules are secret.** Players must never see, read or deduce them: no threshold in
+  the app, rules text, notifications or errors, and no check logic or numbers in
+  `src/` or `functions/src/shared/` (the app's code is public). Everything lives in
+  server-only files: `functions/src/antiCheat.ts` (settings, reasons, holds,
+  qualification), `functions/src/boardEngine.ts` (rows, tiers, promotions),
+  `functions/src/integrity.ts` (reports, sanctions, spot checks, audit log).
+- **Settings**: `serverConfig/antiCheat` (closed to every app user, admins included).
+  The code only has starting values and **the repository is public**, so the owner sets
+  their own numbers in the Admin tab ("Check settings": `getAntiCheatSettings` /
+  `setAntiCheatSettings`, labels come from the server, every save is audited). A secret
+  `salt` (created by the server) gives each player a fixed random offset on the trust and
+  diversity checks. Don't write the chosen numbers in this file, commits or logs.
+- **Clean result** = the photo check read the numbers itself (`match`, confidence ≥ the
+  secret minimum, no look-alike) and nothing was edited or typed by hand. Only clean
+  results count for **Neon, Prism and crowns**; admin-approved results still pay out and
+  count for Gold and below. Neon / Prism come from a hidden ranking
+  (`boardsPrivate/{boardId}`, clean-only totals in `seasonPrivate/{id}`) of players who
+  pass the hidden checks (`playerChecks/{uid}`: clean matches, different opponents this
+  season, not on the watch list). Rows store the tier shown (`entries[].tier`).
+- **Holds**: squad results above a limit or far above the player's own average are held
+  from the leaderboards (payout still happens): `heldResults/{matchId}_{uid}` with the real
+  reason for admins; the player's row / position just shows "Being verified"
+  (`verifying`). Admin Release (counts, crowns if clean) or Reject.
+- **Promotions** to Neon / Prism wait in `pendingPromotions` until a random time later
+  (`applyPendingPromotions`, every 15 min); demotions are instant. A player failing a
+  hidden check simply sees the highest tier they qualify for.
+- **Spot checks**: a secret share of settled matches goes to `spotChecks` (Admin "Spot
+  checks"); "Looks OK" sets `match.spotChecked` ("✓ Spot-checked by an admin");
+  Reject takes the match off the boards and is a strike for the reporter.
+- **Reports**: "Report" on leaderboard rows (`reportPlayer`, reason required, a few per
+  day) → `playerReports` (Admin "Reports"). **Admin actions** (`integrityAction`, note
+  required): release, reject, spot_ok, dismiss, disqualify (that game's season stats,
+  tiers, trophies and crowns; later matches there don't count: `disqualified/…`), warn,
+  deactivate (Auth disabled, off the boards). Every action → `auditLog` (append-only).
+- **Strikes**: a proven fake (reject) = strike 1 → warning notification; strike 2 →
+  account deactivated. Repeated held or rejected results → hidden watch flag: every
+  result goes to an admin first. `publicStats/{season}` feeds the leaderboard footer
+  "This season: N results rejected · N accounts deactivated".
 
 ## Admin email alerts
 

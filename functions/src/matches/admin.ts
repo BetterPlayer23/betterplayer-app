@@ -19,7 +19,8 @@ import {
   winnersOf,
 } from '../shared/games';
 import { removeResult, statsForMatch, type GameStats, type StatsEntry } from '../shared/stats';
-import { fail, matchRef, requireString, type MatchDoc, type ReportDoc } from './common';
+import { antiCheatRef, readAntiCheat, type MatchReviewDoc } from '../antiCheat';
+import { fail, matchRef, matchReviewRef, requireString, type MatchDoc, type ReportDoc } from './common';
 
 // ---------- player stats (playerStats/{uid}, statsEntries/{matchId}; server-only writes)
 
@@ -91,11 +92,13 @@ export async function prepareSettlement(
 ) {
   const ref = matchRef(db, matchId);
   const reviewRef = db.collection('admin_reviews').doc(matchId);
-  const [reviewSnap, reportSnap, disputesSnap, statsEntrySnap] = await Promise.all([
+  const [reviewSnap, reportSnap, disputesSnap, statsEntrySnap, checkSnap, antiSnap] = await Promise.all([
     tx.get(reviewRef),
     tx.get(ref.collection('reports').doc(match.reportedByUid || '_')),
     tx.get(ref.collection('disputes')),
     tx.get(statsEntryRef(db, matchId)),
+    tx.get(matchReviewRef(db, matchId)),
+    tx.get(antiCheatRef(db)),
   ]);
   if (reviewSnap.exists) throw fail('failed-precondition', 'This match has already been decided.');
 
@@ -134,6 +137,9 @@ export async function prepareSettlement(
     report: reportSnap.data() as ReportDoc | undefined,
     disputerUids: disputesSnap.docs.map((d) => d.id),
     statsCounted: statsEntrySnap.exists,
+    // The photo check (older matches kept it on the match itself).
+    check: (checkSnap.data() as MatchReviewDoc | undefined) ?? { verification: match.verification },
+    spotCheckRate: readAntiCheat(antiSnap.data()).spotCheckRate,
     rows,
   };
 }
@@ -293,16 +299,30 @@ export function writeSettlement(
     reportedWinners: report ? winnersOf(report) : null,
     disputed: !!match.disputed,
     players: match.players.map((p) => ({ uid: p.uid, gamerTag: p.gamerTag })),
-    ...(match.verification && {
+    ...(s.check.verification && {
       verification: {
-        status: match.verification.status,
-        confidence: match.verification.confidence,
-        reason: match.verification.reason,
+        status: s.check.verification.status,
+        confidence: s.check.verification.confidence,
+        reason: s.check.verification.reason,
       },
     }),
     note: opts.note,
     createdAt: nowTs,
   });
+
+  // Spot checks: a random share of settled matches goes to admins anyway.
+  if (!cancelled && Math.random() < s.spotCheckRate) {
+    tx.set(db.collection('spotChecks').doc(matchId), {
+      matchId,
+      game: match.game,
+      gameName: match.gameName,
+      players: match.players.map((p) => ({ uid: p.uid, gamerTag: p.gamerTag })),
+      reporterUid: match.reportedByUid ?? null,
+      decidedBy: opts.decidedBy,
+      status: 'open',
+      createdAt: nowTs,
+    });
+  }
 
   tx.update(s.ref, {
     ...opts.matchUpdate,

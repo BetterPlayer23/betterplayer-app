@@ -14,7 +14,6 @@ import {
   SHARE_CODE_LENGTH,
   type GameConfig,
   type MatchStatus,
-  type ReviewReason,
   type Verification,
 } from '../shared/games';
 import { BETA_RULES_VERSION } from '../shared/betaRules';
@@ -71,10 +70,12 @@ export type MatchDoc = {
   draw?: boolean; // a draw: every entry refunded
   decision?: 'approve' | 'override' | 'cancel_refund';
   settledAt?: Timestamp;
-  // Automatic result check (Claude vision) and auto-approval
+  // Older matches only: the check's verdict and review reasons now live in
+  // matchReview/{matchId} (admins only), never on the match players can read.
   verification?: Verification & { model?: string; checkedAt?: Timestamp };
-  reviewReasons?: ReviewReason[]; // why it went to an admin
+  reviewReasons?: string[];
   decidedBy?: 'admin' | 'vision';
+  spotChecked?: boolean; // an admin spot-checked it and found it OK
   reversedAt?: Timestamp; // an admin reversed the automatic decision
 };
 
@@ -90,7 +91,7 @@ export type ReportDoc = {
   notes: string | null;
   screenshotPath: string;
   imageHash?: string;
-  vision?: unknown; // what the automatic check read on the screenshot
+  vision?: unknown; // older reports only (now in matchReview)
   createdAt: Timestamp;
 };
 
@@ -245,3 +246,13 @@ export function closedMessage(status: MatchStatus): string {
       return 'This match has already started.';
   }
 }
+
+// matchReview/{matchId}: what the photo check read, what was submitted, the
+// verdict and why the match went to an admin. Admins only (firestore.rules).
+export const matchReviewRef = (db: Firestore, matchId: string) =>
+  db.collection('matchReview').doc(matchId);
+
+// photoReads/{matchId}_{uid}: the result photo read before the form was filled
+// in (server-only).
+export const photoReadRef = (db: Firestore, matchId: string, uid: string) =>
+  db.collection('photoReads').doc(`${matchId}_${uid}`);
