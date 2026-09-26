@@ -141,8 +141,11 @@ Players must be **18+** and in **Spain**.
   pushes to `main` that change the app) with `npx eas-cli@latest update --branch expo-go
   --environment preview --non-interactive`, after `npx expo install --check`. The run
   summary shows a QR code / link (`qr.expo.dev/eas-update?projectId=…&groupId=…`) to open
-  it in Expo Go. Needs the repository secret `EXPO_TOKEN` (expo.dev access token from the
-  account that owns the project); without it, push runs are skipped. `app.json` has
+  it in Expo Go. Needs the repository secret `EXPO_TOKEN`: a robot token (role Developer
+  or higher) of the Expo organization **`betterplayer.one`**, which owns the project and
+  must be `owner` in `app.json` (EAS refuses to publish when owner/slug don't match the
+  project ID); without the secret, push runs are skipped. The workflow reads project ID,
+  owner and slug from `app.json`. `app.json` has
   `runtimeVersion: { policy: "appVersion" }` and `updates.url` (`u.expo.dev/<projectId>`),
   `expo-updates` is installed, and `eas.json` holds only the CLI settings. Expo Go only
   runs the SDK it was built for, so native packages must stay on the SDK 57 versions

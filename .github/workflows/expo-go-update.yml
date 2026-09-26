@@ -5,8 +5,10 @@ name: Publish to Expo Go
 # Runs by hand (Actions → "Publish to Expo Go" → Run workflow) and on every
 # push to main that changes the app. The run's summary page shows the QR code
 # and the link to open this version in Expo Go.
-# Needs the repository secret EXPO_TOKEN (expo.dev → Account settings →
-# Access tokens), from the Expo account that owns the project (owner in app.json).
+# Needs the repository secret EXPO_TOKEN: an access token of a robot (role
+# Developer or higher) in the Expo organization that owns the project, which
+# must be the "owner" in app.json ("betterplayer.one"), with the same "slug"
+# as the project on expo.dev.
 on:
   workflow_dispatch:
   push:
@@ -28,11 +30,6 @@ permissions:
 concurrency:
   group: expo-go-update
   cancel-in-progress: true
-
-env:
-  PROJECT_ID: b2481696-ad1d-46ee-b764-706a243d38cd
-  OWNER: betterplayer
-  SLUG: betterplayer
 
 jobs:
   publish:
@@ -77,6 +74,10 @@ jobs:
           MESSAGE: ${{ github.event.head_commit.message || 'Published by hand' }}
         run: |
           set -euo pipefail
+          # Project, owner (Expo account/organization) and slug come from app.json.
+          PROJECT_ID=$(jq -r '.expo.extra.eas.projectId' app.json)
+          OWNER=$(jq -r '.expo.owner' app.json)
+          SLUG=$(jq -r '.expo.slug' app.json)
           FIRST_LINE=$(printf '%s' "$MESSAGE" | head -n 1 | cut -c1-120)
           npx --yes eas-cli@latest update \
             --branch expo-go \
