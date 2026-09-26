@@ -36,7 +36,7 @@ export default function VerifyEmailScreen() {
       if (checking.current || !alive) return;
       checking.current = true;
       try {
-        if (await checkRef.current()) setFlash('Email verified. You’re all set!');
+        if (await checkRef.current()) setFlash('Email confirmed. You’re all set!');
       } catch {
         // Offline for a moment: the next check tries again.
       } finally {

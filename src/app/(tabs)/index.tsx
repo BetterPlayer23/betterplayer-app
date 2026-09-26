@@ -26,7 +26,7 @@ export default function HomeScreen() {
   const credits = (n: number) => (wallet.loading ? '…' : formatCredits(n));
   const mine = useMyMatches(10);
   const open = useOpenMatches(5);
-  // A short message from the previous screen, e.g. "Email verified".
+  // A short message from the previous screen, e.g. "Email confirmed".
   const flash = useFlash();
   useEffect(() => {
     if (!flash) return;

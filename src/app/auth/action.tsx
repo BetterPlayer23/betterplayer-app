@@ -80,7 +80,7 @@ export default function AuthActionScreen() {
           await applyActionCode(auth, code);
           const signedIn = !!auth.currentUser;
           if (signedIn) await checkVerified();
-          setFlash('Email verified. You’re all set!');
+          setFlash('Email confirmed. You’re all set!');
           setPhase({ step: 'verified', signedIn });
         } else if (mode === 'resetPassword') {
           const email = await verifyPasswordResetCode(auth, code);
@@ -94,7 +94,7 @@ export default function AuthActionScreen() {
       } catch (e) {
         // A verification link opened twice: fine if the email is verified now.
         if (mode === 'verifyEmail' && auth.currentUser && (await checkVerified().catch(() => false))) {
-          setFlash('Your email is already verified.');
+          setFlash('Your email is already confirmed.');
           setPhase({ step: 'verified', signedIn: true });
           return;
         }
@@ -127,11 +127,11 @@ export default function AuthActionScreen() {
         (phase.signedIn ? (
           <View style={styles.row}>
             <ActivityIndicator color={colors.accent} />
-            <Text style={styles.body}>Email verified. Opening Betterplayer…</Text>
+            <Text style={styles.body}>Email confirmed. Opening Betterplayer…</Text>
           </View>
         ) : (
           <>
-            <FormMessage kind="success" text="Email verified." />
+            <FormMessage kind="success" text="Email confirmed." />
             <Text style={styles.body}>
               If Betterplayer is open on another screen, it continues by itself. Otherwise, log in
               here to start playing.

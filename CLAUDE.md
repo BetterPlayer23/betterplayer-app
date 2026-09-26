@@ -166,7 +166,7 @@ Players must be **18+** and in **Spain**.
   outside the sign-in gates): Firebase's emails link here once the console's
   "Customize action URL" is set to `https://betterplayer23.github.io/betterplayer-app/auth/action`.
   `verifyEmail` applies the code and goes straight to Home (or the next gate) with a
-  short "Email verified" message (`setFlash` / `useFlash`); signed out → "Log in".
+  short "Email confirmed" message (`setFlash` / `useFlash`); signed out → "Log in".
   `resetPassword` shows a new-password form (`confirmPasswordReset`). `recoverEmail`
   undoes an email change and offers a password reset. Expired / used / incomplete links
   show a plain error and a way to get a new link. Results are kept per code so the page
