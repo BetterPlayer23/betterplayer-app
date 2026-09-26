@@ -169,3 +169,12 @@ export async function markRead(uid: string, ids: string[]) {
 export async function dismissFlag(flagId: string) {
   await httpsCallable(functions, 'dismissFlag')({ flagId });
 }
+
+// Admins: leave an admin / test account out of rankings (or include it again).
+export async function setRankingExclusion(input: ({ gamerTag: string } | { uid: string }) & { exclude: boolean }) {
+  const { data } = await httpsCallable<typeof input, { uid: string; gamerTag: string; excluded: boolean }>(
+    functions,
+    'setRankingExclusion',
+  )(input);
+  return data;
+}

@@ -4,6 +4,7 @@
  *   node lib/scripts/maintenance.js rebuild-stats [--apply]
  *   node lib/scripts/maintenance.js backfill-image-hashes [--apply]
  *   node lib/scripts/maintenance.js migrate-private [--apply]
+ *   node lib/scripts/maintenance.js exclude-test-accounts [--apply]
  *   node lib/scripts/maintenance.js assign-founders [--apply]
  * Without --apply it only previews and changes nothing. Prints counts only.
  */
@@ -17,6 +18,7 @@ import {
   migratePrivate,
   rebuildStats,
 } from '../maintenance';
+import { excludeTestAccounts } from '../exclusions';
 import { safeError } from '../safeLog';
 
 const PROJECT_ID = process.env.GCLOUD_PROJECT ?? 'betterplayer-beta';
@@ -40,13 +42,22 @@ async function main() {
   } else if (task === 'migrate-private') {
     const n = await migratePrivate(db, apply);
     console.log(`Matches with lobby code / game IDs moved to private data: ${n} (${mode})`);
+  } else if (task === 'exclude-test-accounts') {
+    // Gamer tags only (never emails): Actions logs may be public.
+    const r = await excludeTestAccounts(db, apply);
+    console.log(`Accounts left out of rankings and Founder numbers: ${r.rows.length} (${mode})`);
+    for (const row of r.rows) console.log(`  - ${row.gamerTag}: ${row.reason}`);
+    console.log(`Kept in rankings (owner's main account): ${r.keptTag ?? 'not found'}`);
+    if (r.adminsStillIncluded.length) {
+      console.log(`Admins still included (use the Admin tab to exclude): ${r.adminsStillIncluded.join(', ')}`);
+    }
   } else if (task === 'assign-founders') {
     const r = await assignFounders(db, apply);
     console.log(
-      `Verified players: ${r.verified}. Founder numbers given: ${r.assigned}. Already founders: ${r.already} (${mode})`,
+      `Verified players: ${r.verified} (${r.excluded} admin/test accounts left out). Founder numbers given: ${r.assigned}. Already founders: ${r.already} (${mode})`,
     );
   } else {
-    console.log('Choose migrate-platforms, rebuild-stats, backfill-image-hashes, migrate-private or assign-founders.');
+    console.log('Choose migrate-platforms, rebuild-stats, backfill-image-hashes, migrate-private, exclude-test-accounts or assign-founders.');
     process.exit(1);
   }
 }

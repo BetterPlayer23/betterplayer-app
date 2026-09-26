@@ -91,6 +91,11 @@ export async function applyReview(db: Firestore, reviewId: string, now = new Dat
     if (reversal && !old) return done('nothing-to-reverse');
 
     const uids = match.playerUids;
+    // Admin / test accounts (users/{uid}.excludeFromRankings) never count;
+    // their opponents' results still do.
+    const userSnaps = await Promise.all(uids.map((u) => tx.get(db.collection('users').doc(u))));
+    const excluded = new Set(uids.filter((_, i) => userSnaps[i].get('excludeFromRankings') === true));
+    const ranked = uids.filter((u) => !excluded.has(u));
     const tagOf = (u: string) => match.players.find((p) => p.uid === u)?.gamerTag ?? 'Player';
     const cancelled = review.decision === 'cancel_refund';
     const winners: string[] = cancelled ? [] : Array.isArray(review.winners) ? review.winners : winnersOf(review);
@@ -139,7 +144,9 @@ export async function applyReview(db: Firestore, reviewId: string, now = new Dat
     const addNow: Players | null =
       !cancelled && counted
         ? Object.fromEntries(
-            Object.entries(B.contributionsFor(game.resultKind, uids, winners, details)).map(([u, c]) => [
+            Object.entries(B.contributionsFor(game.resultKind, uids, winners, details))
+              .filter(([u]) => !excluded.has(u))
+              .map(([u, c]) => [
               u,
               { tag: tagOf(u), c },
             ]),
@@ -174,7 +181,7 @@ export async function applyReview(db: Firestore, reviewId: string, now = new Dat
     const changedStats = !!(addNow || takeOut);
 
     // ---- boards and tier changes
-    const movers = new Set(uids);
+    const movers = new Set(ranked);
     const boardsAfter: { stat: B.StatId; entries: B.BoardEntry[] }[] = [];
     const tierMoves: { stat: B.StatId; change: B.TierChange }[] = [];
     if (changedStats) {
@@ -182,7 +189,7 @@ export async function applyReview(db: Firestore, reviewId: string, now = new Dat
         const before = (boardSnaps[i].get('entries') ?? []) as B.BoardEntry[];
         const after = B.updateBoard(
           before,
-          uids.map((u) => ({
+          ranked.map((u) => ({
             uid: u,
             tag: tagOf(u),
             value: B.statValue(newStats[u], stat),
@@ -216,7 +223,7 @@ export async function applyReview(db: Firestore, reviewId: string, now = new Dat
         }
       }
     } else if (addNow && details) {
-      for (const cand of B.recordCandidates(defs, uids, winners, details, streaks)) {
+      for (const cand of B.recordCandidates(defs, uids, winners, details, streaks, (u) => !excluded.has(u))) {
         const res = B.applyRecord(recordDoc(cand.def.id), {
           uid: cand.uid,
           tag: tagOf(cand.uid),
@@ -250,7 +257,7 @@ export async function applyReview(db: Firestore, reviewId: string, now = new Dat
     const badgeSnaps = await Promise.all(badgeRefs.map((r) => tx.get(r)));
 
     // ================= writes =================
-    uids.forEach((u) => {
+    ranked.forEach((u) => {
       const s = newStats[u];
       if (!changedStats) return;
       tx.set(statsRef(u), {
@@ -365,7 +372,13 @@ export async function claimFounder(db: Firestore, uid: string, now = new Date())
     const badgesRef = db.collection('badges').doc(uid);
     const metaRef = db.collection('meta').doc('founders');
     const claimRef = db.collection('founderClaims').doc(uid);
-    const [badges, meta, claim] = await Promise.all([tx.get(badgesRef), tx.get(metaRef), tx.get(claimRef)]);
+    const [badges, meta, claim, user] = await Promise.all([
+      tx.get(badgesRef),
+      tx.get(metaRef),
+      tx.get(claimRef),
+      tx.get(db.collection('users').doc(uid)),
+    ]);
+    if (user.get('excludeFromRankings') === true) return { status: 'excluded' };
     const b = (badges.data() as B.PlayerBadges | undefined) ?? {};
     if (b.founder) return { status: 'founder', number: b.founder.number };
     if (!claim.exists) tx.set(claimRef, { uid, verifiedAt: Timestamp.fromDate(now) });
@@ -407,7 +420,12 @@ export async function assignFounders(db: Firestore, apply: boolean, now = new Da
   const claims = new Map(
     (await db.collection('founderClaims').get()).docs.map((d) => [d.id, (d.get('verifiedAt') as Timestamp).toMillis()]),
   );
+  // Admin / test accounts never get a number.
+  const excluded = new Set(
+    (await db.collection('users').where('excludeFromRankings', '==', true).get()).docs.map((d) => d.id),
+  );
   const order = users
+    .filter((u) => !excluded.has(u.uid))
     .map((u) => ({ uid: u.uid, at: claims.get(u.uid) ?? u.created }))
     .sort((a, b) => a.at - b.at || (a.uid < b.uid ? -1 : 1));
 
@@ -416,7 +434,12 @@ export async function assignFounders(db: Firestore, apply: boolean, now = new Da
     const founders = await db.collection('badges').where('founder.number', '>', 0).count().get();
     const have = founders.data().count;
     const without = order.length - Math.min(order.length, have);
-    return { verified: users.length, assigned: Math.min(without, Math.max(0, B.FOUNDER_LIMIT - have)), already: have };
+    return {
+      verified: users.length,
+      excluded: users.length - order.length,
+      assigned: Math.min(without, Math.max(0, B.FOUNDER_LIMIT - have)),
+      already: have,
+    };
   }
   let assigned = 0;
   let already = 0;
@@ -437,7 +460,7 @@ export async function assignFounders(db: Firestore, apply: boolean, now = new Da
     if (result === 'full') break;
   }
   await db.collection('meta').doc('founders').set({ backfillDone: true }, { merge: true });
-  return { verified: users.length, assigned, already };
+  return { verified: users.length, excluded: users.length - order.length, assigned, already };
 }
 
 // ---------- season end

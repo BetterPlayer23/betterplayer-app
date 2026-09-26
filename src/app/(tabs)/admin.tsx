@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { FlagsList } from '@/components/FlagsList';
 import { FormMessage } from '@/components/FormMessage';
 import { PastDecisionRow } from '@/components/PastDecisionRow';
+import { RankingExclusions } from '@/components/RankingExclusions';
 import { Screen, SectionTitle } from '@/components/Screen';
 import { colors, fonts } from '@/constants/theme';
 import { usePastDecisions, useReviewQueue } from '@/matches/hooks';
@@ -45,6 +46,13 @@ export default function AdminScreen() {
         Possible leaderboard farming. The same two players count at most 3 matches a day.
       </Text>
       <FlagsList />
+
+      <SectionTitle>Left out of rankings</SectionTitle>
+      <Text style={styles.help}>
+        Admin and test accounts: never on leaderboards, no crowns, tiers or Founder number. They
+        can still play matches.
+      </Text>
+      <RankingExclusions />
 
       <SectionTitle>Past decisions</SectionTitle>
       {past.error ? (

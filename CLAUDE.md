@@ -158,8 +158,9 @@ Players must be **18+** and in **Spain**.
 - `.github/workflows/maintenance.yml` – one-off data jobs run by hand, preview unless
   "apply" is ticked: `migrate-platforms`, `rebuild-stats`, `backfill-image-hashes`
   (adds `segments` to old image fingerprints), `migrate-private` (moves old matches'
-  lobby code and game IDs into `matches/{id}/private/data`), `assign-founders` (numbers
-  the first 100 verified players, see Badges). Prints counts only.
+  lobby code and game IDs into `matches/{id}/private/data`), `exclude-test-accounts`
+  (run BEFORE `assign-founders`; prints gamer tags, never emails), `assign-founders`
+  (numbers the first 100 verified players, see Badges). Prints counts only.
 - `storage.lifecycle.json` – result photos are deleted 90 days after upload (the deploy
   workflow applies it to the bucket with `gcloud storage buckets update`). The image
   fingerprints in `imageHashes` are kept. The beta rules (section 7) say so.
@@ -219,7 +220,8 @@ Players must be **18+** and in **Spain**.
   read with `platformsOf()`),
   `ageConfirmed: true`, `ageConfirmedAt`, `country: "ES"` (self-declared), `gameIds`
   (`eaId`, `activisionId`, `epicName`, `clashRoyaleTag`; `eaId` is used by EA FC and
-  Battlefield REDSEC, labelled "EA ID · EA FC · Battlefield REDSEC"), `createdAt`.
+  Battlefield REDSEC, labelled "EA ID · EA FC · Battlefield REDSEC"), `createdAt`,
+  and `excludeFromRankings` (server-only, see Badges; players can't write it).
 - **Never put credits or reputation in `users/{uid}`**: they are server-only.
 - The app may only change `gamerTag`, `gameIds` and `platforms` after sign-up (and
   remove the old `platform` field).
@@ -411,6 +413,18 @@ Players must be **18+** and in **Spain**.
   per session when signed in. Until the Maintenance job `assign-founders` has run (apply),
   claims are only recorded; the job numbers existing verified players by when the app first
   saw them verified, else by sign-up date (Firebase doesn't store the verification date).
+- **Excluded accounts** (admin / test accounts): `users/{uid}.excludeFromRankings`, set only
+  by Cloud Functions (`functions/src/exclusions.ts`): admins' callable
+  `setRankingExclusion({ gamerTag | uid, exclude })` (Admin tab "Left out of rankings",
+  list from `rankingExclusions/{uid}`, admin-read) and the Maintenance job
+  `exclude-test-accounts` (every `frantzbenois+…@gmail.com` address and the gamer tag
+  GOD; `frantzbenois@gmail.com` = Fire__4REAL always stays included). Excluded players
+  still play and settle matches, but get no season stats, board spot, tier, crown or
+  Founder number (`applyReview`, `recordCandidates(eligible)`, `claimFounder`,
+  `assignFounders`); their opponents' results count. Excluding removes them from the live
+  boards (others move up, no notification), deletes their live-season stats, takes their
+  crowns (next best in the history, if any) and clears their badges (old trophies stay).
+  Including again: counts from their next match.
 - **Chip** next to names: crown > Prism/Neon/Gold > Founder > Cobalt/Carbon
   (`chipFor`). Saved on `match.players[].chip` when a player creates/joins a match.
 - **Anti-farming**: the same two players count on boards at most 3 matches a Madrid day

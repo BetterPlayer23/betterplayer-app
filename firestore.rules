@@ -179,6 +179,13 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    // rankingExclusions/{uid}: admin / test accounts left out of rankings
+    // (users/{uid}.excludeFromRankings, set only by Cloud Functions). Admins only.
+    match /rankingExclusions/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // flags/{matchId}: suspicious patterns (anti-farming), admins only.
     match /flags/{id} {
       allow read: if isAdmin();

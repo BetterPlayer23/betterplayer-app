@@ -291,7 +291,8 @@ const RECORD_HISTORY = 5; // kept so a reversed record falls back to the next be
 /**
  * The record candidates of one match: the single best player for each
  * record (join order breaks a tie). `streaks` = each winner's win streak
- * after this match (Clash Royale).
+ * after this match (Clash Royale). `eligible` leaves out players who can't
+ * hold crowns (admin / test accounts); they still count as opponents.
  */
 export function recordCandidates(
   defs: RecordDef[],
@@ -299,10 +300,12 @@ export function recordCandidates(
   winners: string[],
   details: ResultNumbers,
   streaks: Record<string, number>,
+  eligible: (uid: string) => boolean = () => true,
 ): { def: RecordDef; uid: string; value: number }[] {
   const best = (scores: Scores | undefined) => {
     let top: { uid: string; value: number } | null = null;
     for (const uid of playerUids) {
+      if (!eligible(uid)) continue;
       const v = scores?.[uid];
       if (typeof v === 'number' && v > 0 && (!top || v > top.value)) top = { uid, value: v };
     }
@@ -322,7 +325,7 @@ export function recordCandidates(
       const v = streaks[winners[0]] ?? 0;
       if (v > 0) c = { uid: winners[0], value: v };
     }
-    if (c) out.push({ def, ...c });
+    if (c && eligible(c.uid)) out.push({ def, ...c });
   }
   return out;
 }

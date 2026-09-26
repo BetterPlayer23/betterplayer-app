@@ -14,6 +14,7 @@ import type { MatchDoc } from './matches/common';
 import * as results from './matches/results';
 import { requireUid, requireVerifiedEmail } from './matches/common';
 import * as authEmails from './authEmails';
+import { setRankingExclusionAction } from './exclusions';
 import * as boards from './leaderboards';
 import { previousSeason, seasonOf } from './shared/badges';
 import { acceptRules as acceptRulesAction } from './rules';
@@ -189,6 +190,9 @@ export const claimFounder = callable(claimFounderAction, {}, true);
 
 // Admins: mark a suspicious-pattern flag as reviewed.
 export const dismissFlag = callable(boards.dismissFlag);
+
+// Admins: leave an admin / test account out of rankings and Founder numbers (or include it again).
+export const setRankingExclusion = callable(setRankingExclusionAction);
 
 // 00:10 on the 1st of each month (Spain): close last month's season and give
 // every Prism holder a permanent trophy.
